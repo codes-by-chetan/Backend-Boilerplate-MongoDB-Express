@@ -69,17 +69,12 @@ const notificationSchema = new mongoose.Schema(
 );
 
 // Plugins
+notificationSchema.plugin(plugins.versioning);
 notificationSchema.plugin(plugins.paginate);
 notificationSchema.plugin(plugins.privatePlugin);
-notificationSchema.plugin(plugins.softDelete);
 
 // Indexes
 notificationSchema.index({ recipient: 1, status: 1, createdAt: -1 });
-
-// Pre-save hook for DB logging
-notificationSchema.pre("save", async function () {
-    return middlewares.dbLogger("Notification").call(this);
-});
 
 // Methods
 notificationSchema.methods.markAsRead = async function () {

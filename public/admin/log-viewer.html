@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Log Viewer - Admin Observability</title>
+  <link rel="icon" type="image/png" href="/favicon-32x32.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+
+  <style>
+    :root {
+      --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      --font-mono: 'JetBrains Mono', monospace;
+    }
+
+    body.theme-dark {
+      --bg-base: #090d16;
+      --bg-surface: #0f172a;
+      --border-subtle: rgba(255, 255, 255, 0.1);
+      --text-primary: #f8fafc;
+      --text-secondary: #94a3b8;
+      --primary: #38bdf8;
+      --btn-bg: #1e293b;
+      --btn-color: #f8fafc;
+      --iframe-bg: #090d16;
+    }
+
+    body.theme-light {
+      --bg-base: #f8fafc;
+      --bg-surface: #ffffff;
+      --border-subtle: rgba(15, 23, 42, 0.1);
+      --text-primary: #0f172a;
+      --text-secondary: #475569;
+      --primary: #0284c7;
+      --btn-bg: #f1f5f9;
+      --btn-color: #0f172a;
+      --iframe-bg: #ffffff;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: var(--font-sans);
+      background: var(--bg-base);
+      color: var(--text-primary);
+      height: 100vh;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      transition: background-color 0.25s ease, color 0.25s ease;
+    }
+
+    .toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 12px 20px;
+      background: var(--bg-surface);
+      border-bottom: 1px solid var(--border-subtle);
+      flex-shrink: 0;
+    }
+
+    .toolbar-left {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .back-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      padding: 6px 14px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--btn-color);
+      background: var(--btn-bg);
+      border: 1px solid var(--border-subtle);
+      cursor: pointer;
+      text-decoration: none;
+      transition: all 0.2s;
+    }
+
+    .back-btn:hover {
+      border-color: var(--primary);
+    }
+
+    .title-section {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .title {
+      font-size: 14px;
+      font-weight: 700;
+      font-family: var(--font-mono);
+    }
+
+    .meta {
+      font-size: 12px;
+      color: var(--text-secondary);
+    }
+
+    .toolbar-right {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .action-btn {
+      padding: 6px 14px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      border: 1px solid var(--border-subtle);
+      background: var(--btn-bg);
+      color: var(--btn-color);
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .action-btn.primary {
+      background: var(--primary);
+      color: #fff;
+      border-color: transparent;
+    }
+
+    .action-btn:hover {
+      opacity: 0.9;
+    }
+
+    iframe {
+      width: 100%;
+      flex: 1;
+      border: 0;
+      background: var(--iframe-bg);
+    }
+  </style>
+</head>
+<body class="theme-dark">
+  <header class="toolbar">
+    <div class="toolbar-left">
+      <button id="backButton" class="back-btn">← Back</button>
+      <div class="title-section">
+        <div class="title" id="title">Loading log...</div>
+        <div class="meta" id="meta">Fetching log contents from server</div>
+      </div>
+    </div>
+
+    <div class="toolbar-right">
+      <button id="themeButton" class="action-btn" title="Toggle Theme">☀️</button>
+      <button id="refreshButton" class="action-btn primary">🔄 Refresh</button>
+    </div>
+  </header>
+
+  <iframe id="viewer" title="Log Viewer"></iframe>
+
+  <script>
+    const storageKeyToken = "adminAccessToken";
+    const storageKeyTheme = "adminThemePref";
+    const token = localStorage.getItem(storageKeyToken);
+
+    // Theme setup
+    let currentTheme = localStorage.getItem(storageKeyTheme) || "dark";
+    const applyTheme = (theme) => {
+      document.body.className = `theme-${theme}`;
+      document.getElementById("themeButton").textContent = theme === "dark" ? "☀️" : "🌙";
+      localStorage.setItem(storageKeyTheme, theme);
+      currentTheme = theme;
+    };
+    applyTheme(currentTheme);
+
+    document.getElementById("themeButton").addEventListener("click", () => {
+      applyTheme(currentTheme === "dark" ? "light" : "dark");
+      // Re-render current log with new theme styling
+      if (window.__lastLogRawHtml) {
+        iframe.srcdoc = transformLogHtml(window.__lastLogRawHtml);
+      }
+    });
+
+    const apiOrigin = window.location.origin;
+    const params = new URLSearchParams(window.location.search);
+    const typeParam = params.get("type");
+    const targetParam = params.get("target");
+
+    const file = params.get("file") || (typeParam === "file" ? targetParam : null);
+    const date = params.get("date") || (typeParam === "date" ? targetParam : null);
+    const recent = params.get("recent") || (typeParam === "recent" ? "true" : null);
+
+    const titleElement = document.getElementById("title");
+    const metaElement = document.getElementById("meta");
+    const iframe = document.getElementById("viewer");
+    const backButton = document.getElementById("backButton");
+    const refreshButton = document.getElementById("refreshButton");
+
+    const escapeHtml = (val) =>
+      String(val).replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
+
+    const resolveTarget = () => {
+      if (file) {
+        return {
+          label: file,
+          url: `${apiOrigin}/api/logs/file/${encodeURIComponent(file)}`,
+        };
+      }
+      if (date) {
+        return {
+          label: `logs-${date}.html`,
+          url: `${apiOrigin}/api/logs/by-date/${encodeURIComponent(date)}`,
+        };
+      }
+      // Default: recent log if recent is true or if no parameters were specified
+      return {
+        label: "Today's Recent Log",
+        url: `${apiOrigin}/api/logs/recents`,
+      };
+    };
+
+    const target = resolveTarget();
+
+
+    const transformLogHtml = (html) => {
+      const isDark = currentTheme === "dark";
+
+      // Strip document wrappers and premature closing tags
+      let cleanContent = String(html || "")
+        .replace(/<!DOCTYPE[^>]*>/gi, "")
+        .replace(/<html[^>]*>/gi, "")
+        .replace(/<\/html>/gi, "")
+        .replace(/<head>[\s\S]*?<\/head>/gi, "")
+        .replace(/<body[^>]*>/gi, "")
+        .replace(/<\/body>/gi, "")
+        .replace(/<pre[^>]*>/gi, "")
+        .replace(/<\/pre>/gi, "")
+        .trim();
+
+      return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: 'JetBrains Mono', 'Courier New', monospace;
+      background: ${isDark ? '#090d16' : '#ffffff'};
+      color: ${isDark ? '#f8fafc' : '#0f172a'};
+      padding: 20px;
+      line-height: 1.7;
+      font-size: 13px;
+      margin: 0;
+    }
+    .log-stream {
+      white-space: pre-wrap;
+      word-break: break-word;
+      overflow-wrap: break-word;
+      margin: 0;
+      padding: 0;
+      font-family: inherit;
+    }
+    .log-line {
+      display: block;
+      margin: 2px 0;
+      padding: 2px 0;
+      border-bottom: 1px solid ${isDark ? 'rgba(255, 255, 255, 0.04)' : 'rgba(0, 0, 0, 0.04)'};
+    }
+    .timestamp {
+      color: ${isDark ? '#94a3b8' : '#64748b'};
+      font-weight: 600;
+    }
+    .info { color: #38bdf8; font-weight: 700; }
+    .warn { color: #f59e0b; font-weight: 700; }
+    .error { color: #ef4444; font-weight: 700; }
+    .success { color: #10b981; font-weight: 700; }
+    .debug { color: #c084fc; font-weight: 700; }
+    .method { font-weight: 700; }
+    .status-red { color: #ef4444; font-weight: 700; }
+    .status-green { color: #10b981; font-weight: 700; }
+    .status-message { color: #f59e0b; }
+    .content-length { font-weight: 700; }
+    .response-time { font-weight: 700; }
+    .url {
+      background: ${isDark ? '#1e293b' : '#e2e8f0'};
+      padding: 2px 6px;
+      border-radius: 4px;
+    }
+  </style>
+</head>
+<body>
+  <pre class="log-stream">${cleanContent}</pre>
+</body>
+</html>`;
+    };
+
+    const loadLog = async () => {
+      if (!token) {
+        titleElement.textContent = "Missing Admin Token";
+        metaElement.textContent = "Please go to /admin and log in first.";
+        iframe.srcdoc = "<div style='font-family:monospace;padding:24px;color:#ef4444;'>Unauthorized: Please log in at /admin first.</div>";
+        return;
+      }
+
+      if (!target) {
+        titleElement.textContent = "No log specified";
+        metaElement.textContent = "Open this viewer from the admin dashboard.";
+        return;
+      }
+
+      titleElement.textContent = target.label;
+      metaElement.textContent = "Fetching log contents...";
+
+      try {
+        const response = await fetch(target.url, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+
+        const html = await response.text();
+        if (!response.ok) {
+          throw new Error(html || `Error ${response.status}`);
+        }
+
+        window.__lastLogRawHtml = html;
+        iframe.srcdoc = transformLogHtml(html);
+        metaElement.textContent = `Last refreshed at ${new Date().toLocaleTimeString()}`;
+      } catch (err) {
+        iframe.srcdoc = `<pre style="padding:20px;color:#ef4444;font-family:monospace;">${escapeHtml(err.message || err)}</pre>`;
+        metaElement.textContent = "Failed to load log content";
+      }
+    };
+
+    backButton.addEventListener("click", () => {
+      window.location.href = `${apiOrigin}/admin`;
+    });
+
+    refreshButton.addEventListener("click", loadLog);
+    loadLog();
+  </script>
+</body>
+</html>

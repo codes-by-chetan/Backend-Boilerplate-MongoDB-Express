@@ -24,7 +24,6 @@ const authMiddleware = asyncHandler(async (req, res, next) => {
     try {
         decoded = jwt.verify(token, config.jwt.secret);
     } catch (err) {
-        console.log(err.message);
         if (err.message === "jwt expired") {
             throw new ApiError(httpStatus.UNAUTHORIZED, "Session expired");
         }
@@ -62,4 +61,21 @@ const authMiddleware = asyncHandler(async (req, res, next) => {
     next();
 });
 
+/**
+ * Middleware to authorize users by specific roles (RBAC)
+ * @param {...string} allowedRoles
+ */
+export const authorize = (...allowedRoles) => (req, res, next) => {
+    if (!req.user) {
+        throw new ApiError(httpStatus.UNAUTHORIZED, "Authentication required");
+    }
+
+    if (!allowedRoles.includes(req.user.role)) {
+        throw new ApiError(httpStatus.FORBIDDEN, "Access denied: insufficient permissions");
+    }
+
+    next();
+};
+
+export { authMiddleware };
 export default authMiddleware;

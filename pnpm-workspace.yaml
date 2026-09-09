@@ -1,2 +1,9 @@
+packages:
+  - "."
+  - "frontend/apps/*"
+  - "frontend/packages/*"
+
 allowBuilds:
   bcrypt: true
+  esbuild: true
+

@@ -1,0 +1,3166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Admin Dashboard & Real-Time Monitor</title>
+  <link rel="icon" type="image/png" href="/favicon-32x32.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  
+  <!-- React 18, Babel & Socket.io -->
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="/socket.io/socket.io.js"></script>
+
+  <style>
+    :root {
+      --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      --font-mono: 'JetBrains Mono', monospace;
+      --transition-smooth: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    /* DARK THEME */
+    body.theme-dark {
+      --bg-base: #090d16;
+      --bg-surface: #0f172a;
+      --bg-surface-elevated: #1e293b;
+      --bg-glass: rgba(15, 23, 42, 0.82);
+      --border-subtle: rgba(255, 255, 255, 0.08);
+      --border-strong: rgba(255, 255, 255, 0.16);
+      --text-primary: #f8fafc;
+      --text-secondary: #94a3b8;
+      --text-muted: #64748b;
+      --primary: #38bdf8;
+      --primary-hover: #0ea5e9;
+      --primary-glow: rgba(56, 189, 248, 0.25);
+      --success: #10b981;
+      --success-glow: rgba(16, 185, 129, 0.2);
+      --warning: #f59e0b;
+      --danger: #ef4444;
+      --card-shadow: 0 12px 30px -10px rgba(0, 0, 0, 0.5);
+      --modal-overlay: rgba(0, 0, 0, 0.75);
+      --code-bg: #020617;
+    }
+
+    /* LIGHT THEME */
+    body.theme-light {
+      --bg-base: #f8fafc;
+      --bg-surface: #ffffff;
+      --bg-surface-elevated: #f1f5f9;
+      --bg-glass: rgba(255, 255, 255, 0.88);
+      --border-subtle: rgba(15, 23, 42, 0.08);
+      --border-strong: rgba(15, 23, 42, 0.16);
+      --text-primary: #0f172a;
+      --text-secondary: #475569;
+      --text-muted: #94a3b8;
+      --primary: #0284c7;
+      --primary-hover: #0369a1;
+      --primary-glow: rgba(2, 132, 199, 0.15);
+      --success: #059669;
+      --success-glow: rgba(5, 150, 105, 0.15);
+      --warning: #d97706;
+      --danger: #dc2626;
+      --card-shadow: 0 12px 30px -10px rgba(15, 23, 42, 0.08);
+      --modal-overlay: rgba(15, 23, 42, 0.45);
+      --code-bg: #f8fafc;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: var(--font-sans);
+      background-color: var(--bg-base);
+      color: var(--text-primary);
+      min-height: 100vh;
+      line-height: 1.5;
+      transition: background-color 0.25s ease, color 0.25s ease;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .shell {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 20px 20px 60px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    /* HEADER */
+    .top-header {
+      position: sticky;
+      top: 16px;
+      z-index: 100;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 20px;
+      background: var(--bg-glass);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid var(--border-subtle);
+      border-radius: 16px;
+      box-shadow: var(--card-shadow);
+    }
+
+    .brand-section {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .brand-logo {
+      width: 34px;
+      height: 34px;
+      border-radius: 9px;
+      background: linear-gradient(135deg, #38bdf8, #0284c7);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 800;
+      color: #fff;
+      font-size: 17px;
+      box-shadow: 0 4px 12px var(--primary-glow);
+    }
+
+    .brand-title {
+      font-size: 15px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+
+    .brand-sub {
+      font-size: 11px;
+      color: var(--text-secondary);
+    }
+
+    .status-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      border-radius: 9999px;
+      font-size: 12px;
+      font-weight: 600;
+      border: 1px solid var(--border-subtle);
+      background: var(--bg-surface-elevated);
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+    }
+
+    .status-dot.online {
+      background: #10b981;
+      box-shadow: 0 0 10px #10b981;
+      animation: pulse-dot 2s infinite;
+    }
+
+    .status-dot.offline {
+      background: #ef4444;
+    }
+
+    @keyframes pulse-dot {
+      0% { transform: scale(0.95); opacity: 0.8; }
+      50% { transform: scale(1.15); opacity: 1; }
+      100% { transform: scale(0.95); opacity: 0.8; }
+    }
+
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    /* BUTTONS */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      height: 36px;
+      padding: 0 14px;
+      border-radius: 9px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      border: 1px solid transparent;
+      transition: var(--transition-smooth);
+      white-space: nowrap;
+      font-family: inherit;
+    }
+
+    .btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .btn-primary {
+      background: var(--primary);
+      color: #fff;
+      box-shadow: 0 4px 12px var(--primary-glow);
+    }
+
+    .btn-primary:hover:not(:disabled) {
+      background: var(--primary-hover);
+      transform: translateY(-1px);
+    }
+
+    .btn-secondary {
+      background: var(--bg-surface-elevated);
+      color: var(--text-primary);
+      border: 1px solid var(--border-subtle);
+    }
+
+    .btn-secondary:hover:not(:disabled) {
+      border-color: var(--border-strong);
+      background: var(--bg-surface);
+    }
+
+    .btn-warning {
+      background: var(--warning);
+      color: #fff;
+    }
+
+    .btn-icon {
+      width: 36px;
+      height: 36px;
+      padding: 0;
+      border-radius: 9px;
+      background: var(--bg-surface-elevated);
+      color: var(--text-primary);
+      border: 1px solid var(--border-subtle);
+    }
+
+    .btn-icon:hover {
+      border-color: var(--border-strong);
+    }
+
+    /* METRIC CARDS */
+    .metrics-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+      gap: 14px;
+    }
+
+    .metric-card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: 14px;
+      padding: 16px 18px;
+      box-shadow: var(--card-shadow);
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      transition: var(--transition-smooth);
+    }
+
+    .metric-card:hover {
+      border-color: var(--border-strong);
+      transform: translateY(-2px);
+    }
+
+    .metric-card.highlight {
+      border-color: var(--primary);
+      background: linear-gradient(135deg, var(--bg-surface), var(--bg-surface-elevated));
+    }
+
+    .metric-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .metric-label {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-secondary);
+    }
+
+    .metric-icon {
+      font-size: 16px;
+    }
+
+    .metric-value {
+      font-size: 24px;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      color: var(--text-primary);
+      font-family: var(--font-mono);
+    }
+
+    .metric-footer {
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    .processing-pulse {
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--warning);
+      animation: pulse-dot 1.2s infinite;
+    }
+
+    /* RESOURCE PROGRESS BARS & STAT ROWS */
+    .resource-bar {
+      width: 100%;
+      height: 6px;
+      background: var(--bg-surface-elevated);
+      border-radius: 999px;
+      overflow: hidden;
+      margin-top: 6px;
+      border: 1px solid var(--border-subtle);
+    }
+
+    .resource-bar-fill {
+      height: 100%;
+      border-radius: 999px;
+      transition: width 0.4s ease, background-color 0.4s ease;
+    }
+
+    .stat-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 7px 0;
+      border-bottom: 1px solid var(--border-subtle);
+      font-size: 13px;
+    }
+
+    .stat-row:last-child {
+      border-bottom: none;
+    }
+
+    .stat-row-label {
+      color: var(--text-secondary);
+      font-weight: 500;
+    }
+
+    .stat-row-value {
+      color: var(--text-primary);
+      font-family: var(--font-mono);
+      font-weight: 600;
+      text-align: right;
+    }
+
+    /* CARDS */
+    .card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: 16px;
+      padding: 20px;
+      box-shadow: var(--card-shadow);
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    /* FORM INPUTS */
+    .input-field, .select-field {
+      height: 36px;
+      padding: 0 12px;
+      background: var(--bg-surface-elevated);
+      border: 1px solid var(--border-subtle);
+      border-radius: 8px;
+      font-family: inherit;
+      font-size: 13px;
+      color: var(--text-primary);
+      transition: var(--transition-smooth);
+    }
+
+    .input-field:focus, .select-field:focus {
+      outline: none;
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px var(--primary-glow);
+    }
+
+    /* TABS */
+    .tabs-nav {
+      display: flex;
+      gap: 6px;
+      border-bottom: 1px solid var(--border-subtle);
+      padding-bottom: 10px;
+      overflow-x: auto;
+    }
+
+    .tab-btn {
+      padding: 8px 16px;
+      border-radius: 9px;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-secondary);
+      background: transparent;
+      border: 1px solid transparent;
+      cursor: pointer;
+      transition: var(--transition-smooth);
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      white-space: nowrap;
+    }
+
+    .tab-btn:hover {
+      color: var(--text-primary);
+      background: var(--bg-surface-elevated);
+    }
+
+    .tab-btn.active {
+      color: var(--primary);
+      background: var(--bg-surface-elevated);
+      border-color: var(--border-subtle);
+    }
+
+    /* FILTER TOOLBAR */
+    .toolbar-filter {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      background: var(--bg-surface-elevated);
+      padding: 12px 16px;
+      border-radius: 12px;
+      border: 1px solid var(--border-subtle);
+    }
+
+    .filter-controls {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+    }
+
+    /* TABLES */
+    .table-container {
+      width: 100%;
+      overflow-x: auto;
+      border: 1px solid var(--border-subtle);
+      border-radius: 12px;
+      background: var(--bg-surface);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      text-align: left;
+      font-size: 13px;
+    }
+
+    th {
+      padding: 10px 14px;
+      background: var(--bg-surface-elevated);
+      color: var(--text-secondary);
+      font-weight: 600;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      border-bottom: 1px solid var(--border-subtle);
+      user-select: none;
+    }
+
+    th.sortable {
+      cursor: pointer;
+    }
+
+    th.sortable:hover {
+      color: var(--text-primary);
+      background: var(--bg-surface);
+    }
+
+    td {
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--border-subtle);
+      color: var(--text-primary);
+      vertical-align: middle;
+    }
+
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: var(--bg-surface-elevated); }
+
+    /* PAGINATION BAR */
+    .pagination-bar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 8px 4px;
+      font-size: 13px;
+      color: var(--text-secondary);
+    }
+
+    .pagination-buttons {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .page-btn {
+      min-width: 32px;
+      height: 32px;
+      padding: 0 8px;
+      border-radius: 7px;
+      font-size: 12px;
+      font-weight: 600;
+      background: var(--bg-surface-elevated);
+      color: var(--text-primary);
+      border: 1px solid var(--border-subtle);
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      transition: var(--transition-smooth);
+    }
+
+    .page-btn:hover:not(:disabled) {
+      border-color: var(--border-strong);
+      background: var(--bg-surface);
+    }
+
+    .page-btn.active {
+      background: var(--primary);
+      color: #fff;
+      border-color: transparent;
+    }
+
+    .page-btn:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+
+    /* BADGES */
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 2px 7px;
+      border-radius: 5px;
+      font-size: 11px;
+      font-weight: 700;
+      font-family: var(--font-mono);
+      letter-spacing: 0.02em;
+    }
+
+    .badge-get { background: rgba(56, 189, 248, 0.15); color: #0284c7; }
+    .badge-post { background: rgba(16, 185, 129, 0.15); color: #059669; }
+    .badge-put { background: rgba(245, 158, 11, 0.15); color: #d97706; }
+    .badge-delete { background: rgba(239, 68, 68, 0.15); color: #dc2626; }
+    .badge-patch { background: rgba(139, 92, 246, 0.15); color: #7c3aed; }
+
+    .badge-status-2xx { background: rgba(16, 185, 129, 0.15); color: #059669; }
+    .badge-status-3xx { background: rgba(56, 189, 248, 0.15); color: #0284c7; }
+    .badge-status-4xx { background: rgba(245, 158, 11, 0.15); color: #d97706; }
+    .badge-status-5xx { background: rgba(239, 68, 68, 0.15); color: #dc2626; }
+
+    .code-text {
+      font-family: var(--font-mono);
+      font-size: 12px;
+    }
+
+    /* MODAL */
+    .modal-backdrop {
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: var(--modal-overlay);
+      backdrop-filter: blur(4px);
+      z-index: 999;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+
+    .modal-card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-strong);
+      border-radius: 16px;
+      width: 100%;
+      max-width: 720px;
+      max-height: 85vh;
+      overflow-y: auto;
+      padding: 22px;
+      box-shadow: 0 25px 60px rgba(0, 0, 0, 0.4);
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    pre.code-block {
+      background: var(--code-bg);
+      border: 1px solid var(--border-subtle);
+      border-radius: 9px;
+      padding: 14px;
+      font-family: var(--font-mono);
+      font-size: 12px;
+      color: var(--text-primary);
+      overflow-x: auto;
+      white-space: pre-wrap;
+    }
+
+    .empty-state {
+      padding: 36px 20px;
+      text-align: center;
+      color: var(--text-secondary);
+      font-size: 13px;
+    }
+
+    .feedback-alert {
+      padding: 10px 14px;
+      border-radius: 9px;
+      font-size: 13px;
+      font-weight: 500;
+    }
+    .feedback-alert.success { background: rgba(16, 185, 129, 0.15); color: var(--success); }
+    .feedback-alert.error { background: rgba(239, 68, 68, 0.15); color: var(--danger); }
+
+    /* JSON VIEWER STYLING */
+    .json-viewer-container {
+      background: var(--bg-surface-elevated);
+      border: 1px solid var(--border-subtle);
+      border-radius: 12px;
+      overflow: hidden;
+      font-family: var(--font-mono);
+      display: flex;
+      flex-direction: column;
+    }
+    .json-viewer-toolbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px 12px;
+      background: var(--bg-surface);
+      border-bottom: 1px solid var(--border-subtle);
+      font-family: inherit;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+    .json-tree-body {
+      padding: 12px 14px;
+      max-height: 480px;
+      overflow: auto;
+      font-size: 13px;
+      line-height: 1.6;
+    }
+    .json-line {
+      display: flex;
+      align-items: baseline;
+      padding: 1px 4px;
+      border-radius: 4px;
+      transition: background 0.15s;
+    }
+    .json-line:hover {
+      background: rgba(255, 255, 255, 0.04);
+    }
+    .theme-light .json-line:hover {
+      background: rgba(0, 0, 0, 0.04);
+    }
+    .json-chevron {
+      display: inline-block;
+      width: 14px;
+      font-size: 10px;
+      color: var(--text-muted);
+      transition: transform 0.2s ease;
+      cursor: pointer;
+      user-select: none;
+    }
+    .json-chevron.open {
+      transform: rotate(90deg);
+    }
+    .json-key {
+      color: #38bdf8;
+      font-weight: 600;
+      margin-right: 6px;
+    }
+    .theme-light .json-key {
+      color: #0284c7;
+    }
+    .json-val-string {
+      color: #10b981;
+      word-break: break-word;
+    }
+    .json-val-number {
+      color: #f59e0b;
+      font-weight: 600;
+    }
+    .json-val-bool {
+      color: #a855f7;
+      font-weight: 600;
+    }
+    .json-val-null {
+      color: #94a3b8;
+      font-style: italic;
+    }
+    .json-bracket, .json-comma {
+      color: var(--text-muted);
+    }
+    .json-collapsed-hint {
+      background: var(--bg-surface);
+      color: var(--text-secondary);
+      font-size: 11px;
+      padding: 1px 6px;
+      border-radius: 4px;
+      margin: 0 6px;
+      border: 1px solid var(--border-subtle);
+    }
+
+    /* GIT DIFF TREE STYLING */
+    .diff-tree {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      margin-top: 10px;
+      font-family: var(--font-mono);
+      font-size: 13px;
+    }
+    .diff-item {
+      padding: 8px 12px;
+      border-radius: 8px;
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      border: 1px solid transparent;
+    }
+    .diff-item.added {
+      background: rgba(16, 185, 129, 0.08);
+      border-color: rgba(16, 185, 129, 0.2);
+    }
+    .diff-item.modified {
+      background: rgba(245, 158, 11, 0.08);
+      border-color: rgba(245, 158, 11, 0.2);
+    }
+    .diff-item.deleted {
+      background: rgba(239, 68, 68, 0.08);
+      border-color: rgba(239, 68, 68, 0.2);
+    }
+    .diff-badge {
+      font-size: 11px;
+      font-weight: 700;
+      padding: 2px 6px;
+      border-radius: 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    .diff-badge.added { background: rgba(16, 185, 129, 0.2); color: var(--success); }
+    .diff-badge.modified { background: rgba(245, 158, 11, 0.2); color: var(--warning); }
+    .diff-badge.deleted { background: rgba(239, 68, 68, 0.2); color: var(--danger); }
+    .diff-field-name {
+      font-weight: 700;
+      color: var(--text-primary);
+    }
+    .diff-val-old {
+      color: var(--danger);
+      text-decoration: line-through;
+      margin-right: 6px;
+    }
+    .diff-val-new {
+      color: var(--success);
+      font-weight: 600;
+    }
+
+    /* TIMELINE STYLING */
+    .timeline-list {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      margin-top: 14px;
+    }
+    .timeline-card {
+      background: var(--bg-surface-elevated);
+      border: 1px solid var(--border-subtle);
+      border-radius: 12px;
+      padding: 14px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      transition: var(--transition-smooth);
+    }
+    .timeline-card:hover {
+      border-color: var(--border-strong);
+    }
+  </style>
+</head>
+<body class="theme-dark">
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect, useMemo, useRef } = React;
+
+    const STORAGE_KEY_TOKEN = "adminAccessToken";
+    const STORAGE_KEY_THEME = "adminThemePref";
+
+    // Reusable Pagination Component
+    function Pagination({ pagination, onPageChange, onLimitChange }) {
+      if (!pagination || pagination.total === 0) return null;
+
+      const { page, limit, total, totalPages } = pagination;
+      const startItem = (page - 1) * limit + 1;
+      const endItem = Math.min(page * limit, total);
+
+      // Generate page number items
+      const pageNumbers = [];
+      const delta = 2;
+      for (let i = Math.max(1, page - delta); i <= Math.min(totalPages, page + delta); i++) {
+        pageNumbers.push(i);
+      }
+
+      return (
+        <div className="pagination-bar">
+          <div>
+            Showing <strong>{startItem}</strong> to <strong>{endItem}</strong> of <strong>{total}</strong> entries
+          </div>
+
+          <div className="pagination-buttons">
+            <span style={{ fontSize: "12px", marginRight: "4px" }}>Per page:</span>
+            <select
+              className="select-field"
+              style={{ height: "30px", padding: "0 6px", fontSize: "12px" }}
+              value={limit}
+              onChange={(e) => onLimitChange(parseInt(e.target.value, 10))}
+            >
+              <option value="10">10</option>
+              <option value="20">20</option>
+              <option value="50">50</option>
+              <option value="100">100</option>
+            </select>
+
+            <button
+              className="page-btn"
+              onClick={() => onPageChange(1)}
+              disabled={page <= 1}
+              title="First Page"
+            >
+              «
+            </button>
+            <button
+              className="page-btn"
+              onClick={() => onPageChange(page - 1)}
+              disabled={page <= 1}
+              title="Previous Page"
+            >
+              ‹
+            </button>
+
+            {pageNumbers.map((p) => (
+              <button
+                key={p}
+                className={`page-btn ${p === page ? "active" : ""}`}
+                onClick={() => onPageChange(p)}
+              >
+                {p}
+              </button>
+            ))}
+
+            <button
+              className="page-btn"
+              onClick={() => onPageChange(page + 1)}
+              disabled={page >= totalPages}
+              title="Next Page"
+            >
+              ›
+            </button>
+            <button
+              className="page-btn"
+              onClick={() => onPageChange(totalPages)}
+              disabled={page >= totalPages}
+              title="Last Page"
+            >
+              »
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    // Interactive Collapsible JSON Tree Viewer Node
+    function JsonNode({ name, value, isLast, depth, isExpandedGlobal }) {
+      const [isOpen, setIsOpen] = useState(depth < 2);
+
+      useEffect(() => {
+        if (isExpandedGlobal !== null && isExpandedGlobal !== undefined) {
+          setIsOpen(isExpandedGlobal);
+        }
+      }, [isExpandedGlobal]);
+
+      const isObject = value !== null && typeof value === "object" && !Array.isArray(value);
+      const isArray = Array.isArray(value);
+      const isComplex = isObject || isArray;
+
+      if (isComplex) {
+        const keys = Object.keys(value || {});
+        const count = isArray ? value.length : keys.length;
+        const brackets = isArray ? ["[", "]"] : ["{", "}"];
+
+        return (
+          <div style={{ paddingLeft: depth > 0 ? "18px" : "0" }}>
+            <div className="json-line" onClick={() => setIsOpen(!isOpen)} style={{ cursor: "pointer" }}>
+              <span className={`json-chevron ${isOpen ? "open" : ""}`}>▶</span>
+              {name !== undefined && <span className="json-key">"{name}": </span>}
+              <span className="json-bracket">{brackets[0]}</span>
+              {!isOpen && (
+                <span className="json-collapsed-hint">
+                  {isArray ? `${count} items` : `${count} keys`}
+                </span>
+              )}
+              {!isOpen && <span className="json-bracket">{brackets[1]}{!isLast ? "," : ""}</span>}
+            </div>
+
+            {isOpen && (
+              <div>
+                {isArray
+                  ? value.map((item, idx) => (
+                      <JsonNode
+                        key={idx}
+                        name={undefined}
+                        value={item}
+                        isLast={idx === count - 1}
+                        depth={depth + 1}
+                        isExpandedGlobal={isExpandedGlobal}
+                      />
+                    ))
+                  : keys.map((key, idx) => (
+                      <JsonNode
+                        key={key}
+                        name={key}
+                        value={value[key]}
+                        isLast={idx === count - 1}
+                        depth={depth + 1}
+                        isExpandedGlobal={isExpandedGlobal}
+                      />
+                    ))}
+                <div style={{ paddingLeft: "18px" }}>
+                  <span className="json-bracket">{brackets[1]}{!isLast ? "," : ""}</span>
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      }
+
+      // Primitive formatting
+      let valDisplay;
+      let valClass = "json-val-string";
+      if (typeof value === "string") {
+        valDisplay = `"${value}"`;
+        valClass = "json-val-string";
+      } else if (typeof value === "number") {
+        valDisplay = String(value);
+        valClass = "json-val-number";
+      } else if (typeof value === "boolean") {
+        valDisplay = String(value);
+        valClass = "json-val-bool";
+      } else if (value === null) {
+        valDisplay = "null";
+        valClass = "json-val-null";
+      } else if (value === undefined) {
+        valDisplay = "undefined";
+        valClass = "json-val-null";
+      } else {
+        valDisplay = String(value);
+      }
+
+      return (
+        <div className="json-line" style={{ paddingLeft: depth > 0 ? "18px" : "0" }}>
+          {name !== undefined && <span className="json-key">"{name}": </span>}
+          <span className={valClass}>{valDisplay}</span>
+          {!isLast && <span className="json-comma">,</span>}
+        </div>
+      );
+    }
+
+    // Top-Level Interactive Collapsible JSON Viewer
+    function JsonViewer({ data, title }) {
+      const [isExpandedGlobal, setIsExpandedGlobal] = useState(null);
+      const [copied, setCopied] = useState(false);
+
+      const copyToClipboard = () => {
+        try {
+          navigator.clipboard.writeText(JSON.stringify(data, null, 2));
+          setCopied(true);
+          setTimeout(() => setCopied(false), 2000);
+        } catch (err) {
+          console.error("Copy failed:", err);
+        }
+      };
+
+      return (
+        <div className="json-viewer-container">
+          <div className="json-viewer-toolbar">
+            <span style={{ fontSize: "12px", fontWeight: 700, color: "var(--text-secondary)" }}>
+              {title || "JSON Payload"}
+            </span>
+            <div style={{ display: "flex", gap: "6px" }}>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                style={{ height: "26px", fontSize: "11px", padding: "0 8px" }}
+                onClick={() => setIsExpandedGlobal(true)}
+              >
+                Expand All
+              </button>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                style={{ height: "26px", fontSize: "11px", padding: "0 8px" }}
+                onClick={() => setIsExpandedGlobal(false)}
+              >
+                Collapse All
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                style={{ height: "26px", fontSize: "11px", padding: "0 8px" }}
+                onClick={copyToClipboard}
+              >
+                {copied ? "✓ Copied!" : "📋 Copy JSON"}
+              </button>
+            </div>
+          </div>
+          <div className="json-tree-body">
+            <JsonNode
+              name={undefined}
+              value={data}
+              isLast={true}
+              depth={0}
+              isExpandedGlobal={isExpandedGlobal}
+            />
+          </div>
+        </div>
+      );
+    }
+
+    function App() {
+      // Theme State
+      const [theme, setTheme] = useState(localStorage.getItem(STORAGE_KEY_THEME) || "dark");
+      useEffect(() => {
+        document.body.className = `theme-${theme}`;
+        localStorage.setItem(STORAGE_KEY_THEME, theme);
+      }, [theme]);
+
+      const toggleTheme = () => {
+        setTheme((prev) => (prev === "dark" ? "light" : "dark"));
+      };
+
+      // Auth State
+      const [email, setEmail] = useState("admin@example.com");
+      const [password, setPassword] = useState("admin12345");
+      const [token, setToken] = useState(localStorage.getItem(STORAGE_KEY_TOKEN) || "");
+      const [authMessage, setAuthMessage] = useState(null);
+      const [authStatus, setAuthStatus] = useState("idle");
+
+      // Active Tab
+      const [activeTab, setActiveTab] = useState("stream");
+
+      // Real-Time Socket State
+      const [socketConnected, setSocketConnected] = useState(false);
+      const [liveMetrics, setLiveMetrics] = useState({
+        inFlightRequests: 0,
+        totalRequests: 0,
+        totalSuccess: 0,
+        totalErrors: 0,
+        uptimeSeconds: 0,
+        memory: { heapUsedMb: "0", rssMb: "0" },
+        host: null,
+        nodeProcess: null,
+      });
+      const [liveStream, setLiveStream] = useState([]);
+      const [streamPaused, setStreamPaused] = useState(false);
+      const streamPausedRef = useRef(false);
+      streamPausedRef.current = streamPaused;
+
+      // Stream Client Filters
+      const [streamFilterMethod, setStreamFilterMethod] = useState("");
+      const [streamFilterStatus, setStreamFilterStatus] = useState("");
+      const [streamSearch, setStreamSearch] = useState("");
+      const [streamPage, setStreamPage] = useState(1);
+      const [streamLimit, setStreamLimit] = useState(20);
+
+      // Daily HTML File Logs State
+      const [fileLogs, setFileLogs] = useState([]);
+      const [fileLogsPagination, setFileLogsPagination] = useState({ page: 1, limit: 10, total: 0, totalPages: 0 });
+      const [fileLogsSearch, setFileLogsSearch] = useState("");
+      const [fileLogsSortBy, setFileLogsSortBy] = useState("date");
+      const [fileLogsOrder, setFileLogsOrder] = useState("desc");
+      const [selectedDate, setSelectedDate] = useState(new Date().toISOString().slice(0, 10));
+      const [loadingFiles, setLoadingFiles] = useState(false);
+
+      // System Stats State
+      const [systemStats, setSystemStats] = useState(null);
+      const [loadingStats, setLoadingStats] = useState(false);
+
+      // MongoDB Request Logs State
+      const [dbRequestLogs, setDbRequestLogs] = useState([]);
+      const [dbRequestPagination, setDbRequestPagination] = useState({ page: 1, limit: 20, total: 0, totalPages: 0 });
+      const [dbRequestSearch, setDbRequestSearch] = useState("");
+      const [dbRequestMethod, setDbRequestMethod] = useState("");
+      const [dbRequestStatus, setDbRequestStatus] = useState("");
+      const [dbRequestStatusCode, setDbRequestStatusCode] = useState("");
+      const [dbRequestSortBy, setDbRequestSortBy] = useState("createdAt");
+      const [dbRequestOrder, setDbRequestOrder] = useState("desc");
+      const [loadingDbRequests, setLoadingDbRequests] = useState(false);
+
+      // MongoDB DB Audit Logs State
+      const [dbAuditLogs, setDbAuditLogs] = useState([]);
+      const [dbAuditPagination, setDbAuditPagination] = useState({ page: 1, limit: 20, total: 0, totalPages: 0 });
+      const [availableCollections, setAvailableCollections] = useState([]);
+      const [dbAuditSearch, setDbAuditSearch] = useState("");
+      const [dbAuditCollection, setDbAuditCollection] = useState("");
+      const [dbAuditType, setDbAuditType] = useState("");
+      const [dbAuditStatus, setDbAuditStatus] = useState("");
+      const [dbAuditSortBy, setDbAuditSortBy] = useState("createdAt");
+      const [dbAuditOrder, setDbAuditOrder] = useState("desc");
+      const [loadingDbAudits, setLoadingDbAudits] = useState(false);
+
+      // Inspect Modal State
+      const [inspectItem, setInspectItem] = useState(null);
+
+      // Mongoose Model Versions & Lifecycle State
+      const [availableModels, setAvailableModels] = useState(["User", "UserProfile", "Notification"]);
+      const [selectedModel, setSelectedModel] = useState("User");
+      const [modelDocs, setModelDocs] = useState([]);
+      const [modelDocsCounts, setModelDocsCounts] = useState({ total: 0, active: 0, deleted: 0 });
+      const [modelDocsPagination, setModelDocsPagination] = useState({ page: 1, limit: 10, total: 0, totalPages: 0 });
+      const [modelDocsStatus, setModelDocsStatus] = useState("all");
+      const [modelDocsSearch, setModelDocsSearch] = useState("");
+      const [loadingModelDocs, setLoadingModelDocs] = useState(false);
+
+      // Document History Modal State
+      const [historyDoc, setHistoryDoc] = useState(null); // { modelName, docId, title }
+      const [docHistoryData, setDocHistoryData] = useState(null);
+      const [loadingHistory, setLoadingHistory] = useState(false);
+      const [selectedHistoryVersion, setSelectedHistoryVersion] = useState(null);
+      const [reconstructedVersionData, setReconstructedVersionData] = useState(null);
+
+      // Compare Modal State
+      const [compareDoc, setCompareDoc] = useState(null); // { modelName, docId, title, maxVersion }
+      const [compareV1, setCompareV1] = useState(1);
+      const [compareV2, setCompareV2] = useState(1);
+      const [compareData, setCompareData] = useState(null);
+      const [compareViewTab, setCompareViewTab] = useState("diff"); // "diff" or "json"
+      const [loadingCompare, setLoadingCompare] = useState(false);
+
+      // Rollback Modal State
+      const [rollbackTarget, setRollbackTarget] = useState(null); // { modelName, docId, title, version, isDeleted }
+      const [rollbackLoading, setRollbackLoading] = useState(false);
+
+      const apiOrigin = window.location.origin;
+
+      const handleLogout = (message = "Logged out successfully.") => {
+        localStorage.removeItem(STORAGE_KEY_TOKEN);
+        setToken("");
+        setAuthMessage(message);
+        setAuthStatus("idle");
+      };
+
+      // Authenticated fetch helper
+      const apiFetch = async (url, options = {}) => {
+        const headers = {
+          ...(options.headers || {}),
+          Authorization: `Bearer ${token}`,
+        };
+        const response = await fetch(url, { ...options, headers });
+        if (!response.ok) {
+          const body = await response.json().catch(() => ({}));
+          if (response.status === 401 || (response.status === 404 && body?.message?.includes("User not found"))) {
+            handleLogout("Your session has expired or the database was changed. Please sign in again.");
+          }
+          throw new Error(body?.message || `HTTP ${response.status}`);
+        }
+        return response.json();
+      };
+
+      // Handle Admin Login
+      const handleLogin = async (e) => {
+        e?.preventDefault();
+        setAuthStatus("loading");
+        try {
+          const response = await fetch(`${apiOrigin}/api/auth/login`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ email, password }),
+          });
+          const data = await response.json();
+          if (!response.ok) throw new Error(data?.message || "Login failed");
+
+          const accessToken = data?.data?.accessToken || data?.data?.token;
+          if (!accessToken) throw new Error("No token received from login");
+
+          localStorage.setItem(STORAGE_KEY_TOKEN, accessToken);
+          setToken(accessToken);
+          setAuthStatus("success");
+          setAuthMessage("Admin login successful. Connected to monitoring.");
+        } catch (err) {
+          setAuthStatus("error");
+          setAuthMessage(err.message || "Failed to log in");
+        }
+      };
+
+      // Socket.io Connection Setup
+      useEffect(() => {
+        if (!window.io) return;
+
+        const socket = window.io(apiOrigin, {
+          transports: ["websocket", "polling"],
+        });
+
+        socket.on("connect", () => {
+          setSocketConnected(true);
+          if (token) {
+            socket.emit("join-admin", { token });
+          }
+        });
+
+        socket.on("disconnect", () => {
+          setSocketConnected(false);
+        });
+
+        socket.on("admin-joined", (data) => {
+          if (data?.metrics) {
+            setLiveMetrics((prev) => ({ ...prev, ...data.metrics }));
+            if (data.metrics.recentRequests?.length) {
+              setLiveStream(data.metrics.recentRequests);
+            }
+          }
+        });
+
+        socket.on("request:start", (data) => {
+          setLiveMetrics((prev) => ({
+            ...prev,
+            inFlightRequests: data.inFlightRequests || prev.inFlightRequests + 1,
+          }));
+        });
+
+        socket.on("request:finish", (data) => {
+          if (data?.metrics) {
+            setLiveMetrics((prev) => ({ ...prev, ...data.metrics }));
+          }
+          if (!streamPausedRef.current) {
+            setLiveStream((prev) => [data, ...prev.slice(0, 99)]);
+          }
+        });
+
+        socket.on("system:stats", (data) => {
+          if (data) {
+            setLiveMetrics((prev) => ({ ...prev, ...data }));
+          }
+        });
+
+        return () => {
+          socket.disconnect();
+        };
+      }, [token]);
+
+      // Fetch System Stats
+      const loadSystemStats = async () => {
+        if (!token) return;
+        setLoadingStats(true);
+        try {
+          const res = await apiFetch(`${apiOrigin}/api/logs/system-stats`);
+          setSystemStats(res.data);
+        } catch (err) {
+          console.error(err);
+        } finally {
+          setLoadingStats(false);
+        }
+      };
+
+      // Fetch File Logs with Pagination, Sorting & Filtering
+      const loadFileLogs = async (page = fileLogsPagination.page, limit = fileLogsPagination.limit) => {
+        if (!token) return;
+        setLoadingFiles(true);
+        try {
+          const params = new URLSearchParams({
+            page: String(page),
+            limit: String(limit),
+            search: fileLogsSearch,
+            sortBy: fileLogsSortBy,
+            order: fileLogsOrder,
+          });
+          const res = await apiFetch(`${apiOrigin}/api/logs?${params}`);
+          setFileLogs(res.logs || []);
+          if (res.pagination) setFileLogsPagination(res.pagination);
+        } catch (err) {
+          console.error(err);
+        } finally {
+          setLoadingFiles(false);
+        }
+      };
+
+      // Fetch MongoDB Request Logs with Server-side Pagination, Sorting & Filtering
+      const loadDbRequestLogs = async (page = dbRequestPagination.page, limit = dbRequestPagination.limit) => {
+        if (!token) return;
+        setLoadingDbRequests(true);
+        try {
+          const params = new URLSearchParams({
+            page: String(page),
+            limit: String(limit),
+            search: dbRequestSearch,
+            method: dbRequestMethod,
+            status: dbRequestStatus,
+            statusCode: dbRequestStatusCode,
+            sortBy: dbRequestSortBy,
+            order: dbRequestOrder,
+          });
+          const res = await apiFetch(`${apiOrigin}/api/logs/db-request-logs?${params}`);
+          setDbRequestLogs(res.data?.logs || []);
+          if (res.data?.pagination) setDbRequestPagination(res.data.pagination);
+        } catch (err) {
+          console.error(err);
+        } finally {
+          setLoadingDbRequests(false);
+        }
+      };
+
+      // Fetch MongoDB Audit Logs with Server-side Pagination, Sorting & Filtering
+      const loadDbAuditLogs = async (page = dbAuditPagination.page, limit = dbAuditPagination.limit) => {
+        if (!token) return;
+        setLoadingDbAudits(true);
+        try {
+          const params = new URLSearchParams({
+            page: String(page),
+            limit: String(limit),
+            search: dbAuditSearch,
+            collection: dbAuditCollection,
+            transactionType: dbAuditType,
+            status: dbAuditStatus,
+            sortBy: dbAuditSortBy,
+            order: dbAuditOrder,
+          });
+          const res = await apiFetch(`${apiOrigin}/api/logs/db-audit-logs?${params}`);
+          setDbAuditLogs(res.data?.logs || []);
+          if (res.data?.availableCollections) setAvailableCollections(res.data.availableCollections);
+          if (res.data?.pagination) setDbAuditPagination(res.data.pagination);
+        } catch (err) {
+          console.error(err);
+        } finally {
+          setLoadingDbAudits(false);
+        }
+      };
+
+      // Trigger loads on tab change
+      useEffect(() => {
+        if (!token) return;
+        if (activeTab === "system") loadSystemStats();
+        if (activeTab === "files") loadFileLogs(1, fileLogsPagination.limit);
+        if (activeTab === "db-requests") loadDbRequestLogs(1, dbRequestPagination.limit);
+        if (activeTab === "db-audits") loadDbAuditLogs(1, dbAuditPagination.limit);
+        if (activeTab === "versions") {
+          loadAvailableModels();
+          loadModelDocs(selectedModel, 1);
+        }
+      }, [activeTab, token]);
+
+      // Fetch Available Models
+      const loadAvailableModels = async () => {
+        if (!token) return;
+        try {
+          const res = await apiFetch(`${apiOrigin}/api/logs/models`);
+          if (res.data?.models?.length) {
+            setAvailableModels(res.data.models);
+            if (!res.data.models.includes(selectedModel)) {
+              setSelectedModel(res.data.models[0]);
+            }
+          }
+        } catch (err) {
+          console.error(err);
+        }
+      };
+
+      // Fetch Model Documents
+      const loadModelDocs = async (
+        model = selectedModel,
+        page = modelDocsPagination.page,
+        limit = modelDocsPagination.limit,
+        status = modelDocsStatus,
+        search = modelDocsSearch
+      ) => {
+        if (!token || !model) return;
+        setLoadingModelDocs(true);
+        try {
+          const params = new URLSearchParams({
+            page: String(page),
+            limit: String(limit),
+            status,
+            search,
+          });
+          const res = await apiFetch(`${apiOrigin}/api/logs/model-docs/${model}?${params}`);
+          setModelDocs(res.data?.documents || []);
+          if (res.data?.pagination) setModelDocsPagination(res.data.pagination);
+          if (res.data?.counts) setModelDocsCounts(res.data.counts);
+        } catch (err) {
+          console.error(err);
+        } finally {
+          setLoadingModelDocs(false);
+        }
+      };
+
+      // Open History Modal
+      const openDocHistory = async (modelName, docId, title) => {
+        setHistoryDoc({ modelName, docId, title });
+        setSelectedHistoryVersion(null);
+        setReconstructedVersionData(null);
+        setLoadingHistory(true);
+        try {
+          const res = await apiFetch(`${apiOrigin}/api/logs/document-history/${modelName}/${docId}`);
+          setDocHistoryData(res.data);
+        } catch (err) {
+          console.error(err);
+        } finally {
+          setLoadingHistory(false);
+        }
+      };
+
+      // Fetch Reconstructed Version
+      const loadReconstructedVersion = async (modelName, docId, version) => {
+        setSelectedHistoryVersion(version);
+        try {
+          const res = await apiFetch(`${apiOrigin}/api/logs/document-version/${modelName}/${docId}/${version}`);
+          setReconstructedVersionData(res.data);
+        } catch (err) {
+          console.error(err);
+        }
+      };
+
+      // Open Compare Modal
+      const openCompareModal = async (modelName, docId, title, maxVersion = 2) => {
+        setCompareDoc({ modelName, docId, title, maxVersion });
+        const v1 = 1;
+        const v2 = Math.max(1, maxVersion);
+        setCompareV1(v1);
+        setCompareV2(v2);
+        setCompareViewTab("diff");
+        setLoadingCompare(true);
+        try {
+          const res = await apiFetch(`${apiOrigin}/api/logs/document-compare/${modelName}/${docId}?v1=${v1}&v2=${v2}`);
+          setCompareData(res.data);
+        } catch (err) {
+          console.error(err);
+        } finally {
+          setLoadingCompare(false);
+        }
+      };
+
+      const executeCompare = async (v1, v2) => {
+        if (!compareDoc) return;
+        setLoadingCompare(true);
+        try {
+          const res = await apiFetch(`${apiOrigin}/api/logs/document-compare/${compareDoc.modelName}/${compareDoc.docId}?v1=${v1}&v2=${v2}`);
+          setCompareData(res.data);
+        } catch (err) {
+          console.error(err);
+        } finally {
+          setLoadingCompare(false);
+        }
+      };
+
+      // Execute Rollback / Restore
+      const executeRollback = async (modelName, docId, targetVersion) => {
+        setRollbackLoading(true);
+        try {
+          const res = await apiFetch(`${apiOrigin}/api/logs/document-rollback/${modelName}/${docId}`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ targetVersion }),
+          });
+          setAuthMessage(`Successfully restored ${modelName} to version ${targetVersion} (new commit v${res.data?.version})!`);
+          setRollbackTarget(null);
+          loadModelDocs(selectedModel, modelDocsPagination.page);
+          if (historyDoc && historyDoc.docId === docId) {
+            openDocHistory(modelName, docId, historyDoc.title);
+          }
+        } catch (err) {
+          alert(`Rollback failed: ${err.message}`);
+        } finally {
+          setRollbackLoading(false);
+        }
+      };
+
+      // Handle Column Sort Clicks
+      const toggleSort = (currentSortBy, currentOrder, field, setSortBy, setOrder, refreshFn) => {
+        let newOrder = "asc";
+        if (currentSortBy === field) {
+          newOrder = currentOrder === "asc" ? "desc" : "asc";
+        }
+        setSortBy(field);
+        setOrder(newOrder);
+      };
+
+      // Re-fetch when sort/filters change
+      useEffect(() => {
+        if (token && activeTab === "files") {
+          loadFileLogs(1, fileLogsPagination.limit);
+        }
+      }, [fileLogsSortBy, fileLogsOrder]);
+
+      useEffect(() => {
+        if (token && activeTab === "db-requests") {
+          loadDbRequestLogs(1, dbRequestPagination.limit);
+        }
+      }, [dbRequestMethod, dbRequestStatus, dbRequestStatusCode, dbRequestSortBy, dbRequestOrder]);
+
+      useEffect(() => {
+        if (token && activeTab === "db-audits") {
+          loadDbAuditLogs(1, dbAuditPagination.limit);
+        }
+      }, [dbAuditCollection, dbAuditType, dbAuditStatus, dbAuditSortBy, dbAuditOrder]);
+
+      // Filtered Live Stream
+      const filteredStream = useMemo(() => {
+        return liveStream.filter((item) => {
+          if (streamFilterMethod && item.method !== streamFilterMethod) return false;
+          if (streamFilterStatus === "2xx" && (item.statusCode < 200 || item.statusCode >= 400)) return false;
+          if (streamFilterStatus === "error" && item.statusCode < 400) return false;
+          if (streamSearch) {
+            const term = streamSearch.toLowerCase();
+            const matchesUrl = item.url?.toLowerCase().includes(term);
+            const matchesIp = item.ip?.toLowerCase().includes(term);
+            if (!matchesUrl && !matchesIp) return false;
+          }
+          return true;
+        });
+      }, [liveStream, streamFilterMethod, streamFilterStatus, streamSearch]);
+
+      const paginatedStream = useMemo(() => {
+        const start = (streamPage - 1) * streamLimit;
+        return filteredStream.slice(start, start + streamLimit);
+      }, [filteredStream, streamPage, streamLimit]);
+
+      const streamPagination = useMemo(() => ({
+        page: streamPage,
+        limit: streamLimit,
+        total: filteredStream.length,
+        totalPages: Math.ceil(filteredStream.length / streamLimit) || 1,
+      }), [filteredStream.length, streamPage, streamLimit]);
+
+      // Format helpers
+      const formatUptime = (seconds) => {
+        const d = Math.floor(seconds / (3600 * 24));
+        const h = Math.floor((seconds % (3600 * 24)) / 3600);
+        const m = Math.floor((seconds % 3600) / 60);
+        const s = seconds % 60;
+        return [
+          d > 0 ? `${d}d` : null,
+          h > 0 ? `${h}h` : null,
+          `${m}m`,
+          `${s}s`,
+        ].filter(Boolean).join(" ");
+      };
+
+      const openLogViewer = (paramKey, paramVal) => {
+        window.open(
+          `/admin/log-viewer.html?${paramKey}=${encodeURIComponent(paramVal)}`,
+          "_blank"
+        );
+      };
+
+      const getMethodBadgeClass = (method) => {
+        switch ((method || "").toUpperCase()) {
+          case "GET": return "badge-get";
+          case "POST": return "badge-post";
+          case "PUT": return "badge-put";
+          case "DELETE": return "badge-delete";
+          case "PATCH": return "badge-patch";
+          default: return "badge-get";
+        }
+      };
+
+      const getStatusBadgeClass = (status) => {
+        const s = parseInt(status, 10);
+        if (s >= 500) return "badge-status-5xx";
+        if (s >= 400) return "badge-status-4xx";
+        if (s >= 300) return "badge-status-3xx";
+        return "badge-status-2xx";
+      };
+
+      const renderSortIcon = (currentSortBy, currentOrder, field) => {
+        if (currentSortBy !== field) return " ⇅";
+        return currentOrder === "asc" ? " ▲" : " ▼";
+      };
+
+      const host = liveMetrics.host || systemStats?.host;
+      const nodeProc = liveMetrics.nodeProcess || systemStats?.nodeProcess;
+
+      const getUsageColor = (percent) => {
+        const p = parseFloat(percent) || 0;
+        if (p >= 85) return "var(--danger)";
+        if (p >= 70) return "var(--warning)";
+        return "var(--success)";
+      };
+
+      const getLoadBadgeClass = (load, cores = 1) => {
+        const l = parseFloat(load) || 0;
+        if (l > cores * 1.2) return "badge badge-status-5xx";
+        if (l > cores * 0.8) return "badge badge-method-put";
+        return "badge badge-status-2xx";
+      };
+
+      return (
+        <div className="shell">
+          {/* TOP HEADER */}
+          <header className="top-header">
+            <div className="brand-section">
+              <div className="brand-logo">M</div>
+              <div>
+                <div className="brand-title">MongoDB Boilerplate Admin</div>
+                <div className="brand-sub">Real-Time Observability & Monitoring</div>
+              </div>
+            </div>
+
+            <div className="header-actions">
+              <div className="status-pill">
+                <span className={`status-dot ${socketConnected ? "online" : "offline"}`}></span>
+                <span>{socketConnected ? "Socket: Live" : "Socket: Disconnected"}</span>
+              </div>
+
+              <button
+                className="btn btn-icon"
+                onClick={toggleTheme}
+                title={`Switch to ${theme === "dark" ? "Light" : "Dark"} Mode`}
+              >
+                {theme === "dark" ? "☀️" : "🌙"}
+              </button>
+
+              {token && (
+                <button className="btn btn-secondary" onClick={handleLogout}>
+                  Sign Out
+                </button>
+              )}
+            </div>
+          </header>
+
+          {/* AUTH CARD */}
+          {!token ? (
+            <div className="card">
+              <div>
+                <h2 style={{ fontSize: "17px", fontWeight: 700 }}>Admin Authentication Required</h2>
+                <p style={{ fontSize: "13px", color: "var(--text-secondary)", marginTop: "4px" }}>
+                  Sign in with admin credentials to access live socket streaming, system metrics, and audit logs.
+                </p>
+              </div>
+
+              {authMessage && (
+                <div className={`feedback-alert ${authStatus === "error" ? "error" : "success"}`}>
+                  {authMessage}
+                </div>
+              )}
+
+              <form className="toolbar-filter" onSubmit={handleLogin}>
+                <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", flex: 1 }}>
+                  <input
+                    type="email"
+                    className="input-field"
+                    style={{ minWidth: "220px", flex: 1 }}
+                    value={email}
+                    placeholder="Admin Email"
+                    onChange={(e) => setEmail(e.target.value)}
+                    required
+                  />
+                  <input
+                    type="password"
+                    className="input-field"
+                    style={{ minWidth: "220px", flex: 1 }}
+                    value={password}
+                    placeholder="Admin Password"
+                    onChange={(e) => setPassword(e.target.value)}
+                    required
+                  />
+                </div>
+                <button type="submit" className="btn btn-primary" disabled={authStatus === "loading"}>
+                  {authStatus === "loading" ? "Signing In..." : "Sign In"}
+                </button>
+              </form>
+            </div>
+          ) : (
+            authMessage && (
+              <div className="feedback-alert success" style={{ display: "flex", justifyContent: "space-between" }}>
+                <span>{authMessage}</span>
+                <span style={{ cursor: "pointer", fontWeight: 700 }} onClick={() => setAuthMessage(null)}>✕</span>
+              </div>
+            )
+          )}
+
+          {/* REAL-TIME METRIC PULSE CARDS */}
+          <section className="metrics-grid">
+            <div className="metric-card highlight">
+              <div className="metric-header">
+                <span className="metric-label">In-Flight Requests</span>
+                <span className="processing-pulse"></span>
+              </div>
+              <div className="metric-value">{liveMetrics.inFlightRequests}</div>
+              <div className="metric-footer">Processing right now</div>
+            </div>
+
+            <div className="metric-card">
+              <div className="metric-header">
+                <span className="metric-label">Total Requests</span>
+                <span className="metric-icon">🚀</span>
+              </div>
+              <div className="metric-value">{liveMetrics.totalRequests}</div>
+              <div className="metric-footer">
+                {liveMetrics.totalRequests > 0
+                  ? `${Math.round((liveMetrics.totalSuccess / liveMetrics.totalRequests) * 100)}% ok (${liveMetrics.totalSuccess} ok / ${liveMetrics.totalErrors} err)`
+                  : "Lifetime API calls recorded"}
+              </div>
+            </div>
+
+            <div className="metric-card">
+              <div className="metric-header">
+                <span className="metric-label">Host Machine RAM</span>
+                <span className="metric-icon">🖥️</span>
+              </div>
+              <div className="metric-value" style={{ fontSize: "20px" }}>
+                {host?.usedMemoryGb ? `${host.usedMemoryGb} / ${host.totalMemoryGb}` : "—"}{" "}
+                <span style={{ fontSize: "13px", fontWeight: 500 }}>GB</span>
+              </div>
+              <div className="resource-bar">
+                <div
+                  className="resource-bar-fill"
+                  style={{
+                    width: `${Math.min(100, parseFloat(host?.memoryPercentUsed) || 0)}%`,
+                    backgroundColor: getUsageColor(host?.memoryPercentUsed),
+                  }}
+                ></div>
+              </div>
+              <div className="metric-footer">
+                {host?.freeMemoryGb || "0"} GB free ({host?.memoryPercentUsed || 0}% used)
+              </div>
+            </div>
+
+            <div className="metric-card">
+              <div className="metric-header">
+                <span className="metric-label">Node Process RAM (RSS)</span>
+                <span className="metric-icon">🟢</span>
+              </div>
+              <div className="metric-value" style={{ fontSize: "20px" }}>
+                {nodeProc?.rssMb || liveMetrics.memory?.rssMb || "0"}{" "}
+                <span style={{ fontSize: "13px", fontWeight: 500 }}>MB</span>
+              </div>
+              <div className="resource-bar">
+                <div
+                  className="resource-bar-fill"
+                  style={{
+                    width: `${Math.min(100, parseFloat(nodeProc?.heapPercentUsed) || 0)}%`,
+                    backgroundColor: getUsageColor(nodeProc?.heapPercentUsed),
+                  }}
+                ></div>
+              </div>
+              <div className="metric-footer">
+                {nodeProc?.percentOfHostRam || "0"}% of Host RAM | Heap: {nodeProc?.heapUsedMb || liveMetrics.memory?.heapUsedMb || "0"} MB
+              </div>
+            </div>
+
+            <div className="metric-card">
+              <div className="metric-header">
+                <span className="metric-label">Host CPU Load</span>
+                <span className="metric-icon">⚡</span>
+              </div>
+              <div className="metric-value" style={{ fontSize: "20px" }}>
+                {host?.loadAvg?.[0] || "0.00"}{" "}
+                <span style={{ fontSize: "12px", fontWeight: 500 }}>1m avg</span>
+              </div>
+              <div className="metric-footer">
+                5m: {host?.loadAvg?.[1] || "0.00"} | 15m: {host?.loadAvg?.[2] || "0.00"} ({host?.cpuCores || 0} Cores)
+              </div>
+            </div>
+
+            <div className="metric-card">
+              <div className="metric-header">
+                <span className="metric-label">Server & Host Uptime</span>
+                <span className="metric-icon">⏱️</span>
+              </div>
+              <div className="metric-value" style={{ fontSize: "18px" }}>
+                {formatUptime(liveMetrics.uptimeSeconds || 0)}
+              </div>
+              <div className="metric-footer">
+                Host: {formatUptime(host?.hostUptimeSeconds || host?.uptimeSeconds || 0)}
+              </div>
+            </div>
+          </section>
+
+          {/* TABS NAVIGATION */}
+          <nav className="tabs-nav">
+            <button
+              className={`tab-btn ${activeTab === "stream" ? "active" : ""}`}
+              onClick={() => setActiveTab("stream")}
+            >
+              ⚡ Live Stream ({liveStream.length})
+            </button>
+            <button
+              className={`tab-btn ${activeTab === "system" ? "active" : ""}`}
+              onClick={() => setActiveTab("system")}
+            >
+              📊 System & Health Metrics
+            </button>
+            <button
+              className={`tab-btn ${activeTab === "files" ? "active" : ""}`}
+              onClick={() => setActiveTab("files")}
+            >
+              📁 Daily HTML Files ({fileLogsPagination.total})
+            </button>
+            <button
+              className={`tab-btn ${activeTab === "db-requests" ? "active" : ""}`}
+              onClick={() => setActiveTab("db-requests")}
+            >
+              🗄️ MongoDB Request Logs ({dbRequestPagination.total})
+            </button>
+            <button
+              className={`tab-btn ${activeTab === "db-audits" ? "active" : ""}`}
+              onClick={() => setActiveTab("db-audits")}
+            >
+              🛡️ MongoDB DB Audit Trail ({dbAuditPagination.total})
+            </button>
+            <button
+              className={`tab-btn ${activeTab === "versions" ? "active" : ""}`}
+              onClick={() => setActiveTab("versions")}
+            >
+              📦 Model Versions & History
+            </button>
+          </nav>
+
+          {/* TAB 1: LIVE REQUEST STREAM */}
+          {activeTab === "stream" && (
+            <div className="card">
+              <div className="toolbar-filter">
+                <div className="filter-controls">
+                  <input
+                    type="text"
+                    className="input-field"
+                    placeholder="Search URL or IP..."
+                    value={streamSearch}
+                    onChange={(e) => { setStreamSearch(e.target.value); setStreamPage(1); }}
+                    style={{ minWidth: "180px" }}
+                  />
+                  <select
+                    className="select-field"
+                    value={streamFilterMethod}
+                    onChange={(e) => { setStreamFilterMethod(e.target.value); setStreamPage(1); }}
+                  >
+                    <option value="">All Methods</option>
+                    <option value="GET">GET</option>
+                    <option value="POST">POST</option>
+                    <option value="PUT">PUT</option>
+                    <option value="DELETE">DELETE</option>
+                    <option value="PATCH">PATCH</option>
+                  </select>
+                  <select
+                    className="select-field"
+                    value={streamFilterStatus}
+                    onChange={(e) => { setStreamFilterStatus(e.target.value); setStreamPage(1); }}
+                  >
+                    <option value="">All Statuses</option>
+                    <option value="2xx">Success (2xx/3xx)</option>
+                    <option value="error">Errors (4xx/5xx)</option>
+                  </select>
+                  {(streamSearch || streamFilterMethod || streamFilterStatus) && (
+                    <button
+                      className="btn btn-secondary"
+                      style={{ height: "36px" }}
+                      onClick={() => { setStreamSearch(""); setStreamFilterMethod(""); setStreamFilterStatus(""); setStreamPage(1); }}
+                    >
+                      Clear Filters
+                    </button>
+                  )}
+                </div>
+
+                <div style={{ display: "flex", gap: "8px" }}>
+                  <button
+                    className="btn btn-secondary"
+                    onClick={() => setStreamPaused((prev) => !prev)}
+                  >
+                    {streamPaused ? "▶ Resume Stream" : "⏸ Pause Stream"}
+                  </button>
+                  <button
+                    className="btn btn-secondary"
+                    onClick={() => setLiveStream([])}
+                  >
+                    Clear Stream
+                  </button>
+                </div>
+              </div>
+
+              <div className="table-container">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Time</th>
+                      <th>Method</th>
+                      <th>URL Path</th>
+                      <th>Status</th>
+                      <th>Latency</th>
+                      <th>Client IP</th>
+                      <th>Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {paginatedStream.length === 0 ? (
+                      <tr>
+                        <td colSpan="7" className="empty-state">
+                          {liveStream.length === 0
+                            ? "Waiting for requests... Trigger any API request in another tab to see it stream live!"
+                            : "No requests match the current filters."}
+                        </td>
+                      </tr>
+                    ) : (
+                      paginatedStream.map((req, idx) => (
+                        <tr key={req.id || idx}>
+                          <td className="code-text" style={{ color: "var(--text-muted)", fontSize: "12px" }}>
+                            {new Date(req.finishTime || req.startTime).toLocaleTimeString()}
+                          </td>
+                          <td>
+                            <span className={`badge ${getMethodBadgeClass(req.method)}`}>
+                              {req.method}
+                            </span>
+                          </td>
+                          <td className="code-text" style={{ maxWidth: "340px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                            {req.url}
+                          </td>
+                          <td>
+                            <span className={`badge ${getStatusBadgeClass(req.statusCode)}`}>
+                              {req.statusCode}
+                            </span>
+                          </td>
+                          <td className="code-text" style={{ fontWeight: 600 }}>
+                            {req.durationMs !== undefined ? `${req.durationMs} ms` : "..."}
+                          </td>
+                          <td className="code-text" style={{ color: "var(--text-secondary)", fontSize: "12px" }}>
+                            {req.ip || "-"}
+                          </td>
+                          <td>
+                            <button
+                              className="btn btn-secondary"
+                              style={{ height: "26px", padding: "0 9px", fontSize: "11px" }}
+                              onClick={() => setInspectItem(req)}
+                            >
+                              Inspect
+                            </button>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              <Pagination
+                pagination={streamPagination}
+                onPageChange={(p) => setStreamPage(p)}
+                onLimitChange={(l) => { setStreamLimit(l); setStreamPage(1); }}
+              />
+            </div>
+          )}
+
+          {/* TAB 2: SYSTEM & HEALTH METRICS */}
+          {activeTab === "system" && (
+            <div className="card">
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "12px" }}>
+                <div>
+                  <h3 style={{ fontSize: "16px", fontWeight: 700 }}>Host Machine & Process System Diagnostics</h3>
+                  <p style={{ fontSize: "13px", color: "var(--text-secondary)" }}>
+                    Real-time resource utilization, CPU load averages, Node.js memory allocations, and MongoDB connectivity.
+                  </p>
+                </div>
+                <button className="btn btn-secondary" onClick={loadSystemStats} disabled={loadingStats}>
+                  {loadingStats ? "Refreshing..." : "🔄 Refresh"}
+                </button>
+              </div>
+
+              {!host && !systemStats ? (
+                <div className="empty-state">Loading diagnostics...</div>
+              ) : (
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: "16px" }}>
+                  {/* CARD 1: HOST MACHINE RESOURCES */}
+                  <div className="card" style={{ padding: "18px" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                      <h4 style={{ fontSize: "13px", color: "var(--primary)", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                        🖥️ Host Machine Hardware
+                      </h4>
+                      <span className="badge badge-status-2xx">{host?.platform} / {host?.arch}</span>
+                    </div>
+
+                    <div style={{ marginTop: "12px", display: "grid", gap: "10px" }}>
+                      <div>
+                        <div style={{ display: "flex", justifyContent: "space-between", fontSize: "13px", fontWeight: 600 }}>
+                          <span>Physical RAM Consumed</span>
+                          <span style={{ color: getUsageColor(host?.memoryPercentUsed) }}>
+                            {host?.usedMemoryGb} GB / {host?.totalMemoryGb} GB ({host?.memoryPercentUsed}%)
+                          </span>
+                        </div>
+                        <div className="resource-bar" style={{ height: "10px", marginTop: "6px" }}>
+                          <div
+                            className="resource-bar-fill"
+                            style={{
+                              width: `${Math.min(100, parseFloat(host?.memoryPercentUsed) || 0)}%`,
+                              backgroundColor: getUsageColor(host?.memoryPercentUsed),
+                            }}
+                          ></div>
+                        </div>
+                        <div style={{ display: "flex", justifyContent: "space-between", fontSize: "11px", color: "var(--text-muted)", marginTop: "4px" }}>
+                          <span>Used: {host?.usedMemoryMb} MB</span>
+                          <span style={{ color: "var(--success)", fontWeight: 600 }}>Available: {host?.freeMemoryGb} GB ({host?.freeMemoryMb} MB free)</span>
+                        </div>
+                      </div>
+
+                      <div className="stat-row">
+                        <span className="stat-row-label">Hostname</span>
+                        <span className="stat-row-value">{host?.hostname}</span>
+                      </div>
+                      <div className="stat-row">
+                        <span className="stat-row-label">CPU Model</span>
+                        <span className="stat-row-value" style={{ fontSize: "11px" }}>{host?.cpuModel}</span>
+                      </div>
+                      <div className="stat-row">
+                        <span className="stat-row-label">CPU Cores</span>
+                        <span className="stat-row-value">{host?.cpuCores} Cores</span>
+                      </div>
+                      <div className="stat-row">
+                        <span className="stat-row-label">CPU Load Averages</span>
+                        <div style={{ display: "flex", gap: "6px" }}>
+                          <span className={getLoadBadgeClass(host?.loadAvg?.[0], host?.cpuCores)}>1m: {host?.loadAvg?.[0]}</span>
+                          <span className={getLoadBadgeClass(host?.loadAvg?.[1], host?.cpuCores)}>5m: {host?.loadAvg?.[1]}</span>
+                          <span className={getLoadBadgeClass(host?.loadAvg?.[2], host?.cpuCores)}>15m: {host?.loadAvg?.[2]}</span>
+                        </div>
+                      </div>
+                      <div className="stat-row">
+                        <span className="stat-row-label">Host OS Uptime</span>
+                        <span className="stat-row-value">{formatUptime(host?.hostUptimeSeconds || host?.uptimeSeconds || 0)}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* CARD 2: NODE.JS PROCESS MEMORY ALLOCATION */}
+                  <div className="card" style={{ padding: "18px" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                      <h4 style={{ fontSize: "13px", color: "var(--warning)", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                        🟢 Node.js Process Memory
+                      </h4>
+                      <span className="badge badge-method-get">PID: {nodeProc?.pid}</span>
+                    </div>
+
+                    <div style={{ marginTop: "12px", display: "grid", gap: "10px" }}>
+                      {/* RSS TOTAL MEMORY */}
+                      <div style={{ background: "var(--bg-surface-elevated)", padding: "12px", borderRadius: "10px", border: "1px solid var(--border-subtle)" }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+                          <span style={{ fontSize: "12px", fontWeight: 700, color: "var(--text-secondary)", textTransform: "uppercase" }}>
+                            Total Process Memory (RSS)
+                          </span>
+                          <span style={{ fontSize: "20px", fontWeight: 800, fontFamily: "var(--font-mono)", color: "var(--primary)" }}>
+                            {nodeProc?.rssMb} <span style={{ fontSize: "13px" }}>MB</span>
+                          </span>
+                        </div>
+                        <div style={{ fontSize: "12px", color: "var(--text-secondary)", marginTop: "4px" }}>
+                          Consumed from Host: <strong>{nodeProc?.percentOfHostRam}%</strong> of host's {host?.totalMemoryGb} GB RAM
+                        </div>
+                      </div>
+
+                      {/* V8 HEAP */}
+                      <div>
+                        <div style={{ display: "flex", justifyContent: "space-between", fontSize: "13px", fontWeight: 600 }}>
+                          <span>V8 JS Heap Utilization</span>
+                          <span style={{ color: getUsageColor(nodeProc?.heapPercentUsed) }}>
+                            {nodeProc?.heapUsedMb} MB / {nodeProc?.heapTotalMb} MB ({nodeProc?.heapPercentUsed}%)
+                          </span>
+                        </div>
+                        <div className="resource-bar" style={{ height: "10px", marginTop: "6px" }}>
+                          <div
+                            className="resource-bar-fill"
+                            style={{
+                              width: `${Math.min(100, parseFloat(nodeProc?.heapPercentUsed) || 0)}%`,
+                              backgroundColor: getUsageColor(nodeProc?.heapPercentUsed),
+                            }}
+                          ></div>
+                        </div>
+                        <div style={{ display: "flex", justifyContent: "space-between", fontSize: "11px", color: "var(--text-muted)", marginTop: "4px" }}>
+                          <span>Active Objects: {nodeProc?.heapUsedMb} MB</span>
+                          <span>Allocated Heap: {nodeProc?.heapTotalMb} MB</span>
+                        </div>
+                      </div>
+
+                      <div className="stat-row">
+                        <span className="stat-row-label">External & C++ Buffers</span>
+                        <span className="stat-row-value">{nodeProc?.externalMb} MB</span>
+                      </div>
+                      <div className="stat-row">
+                        <span className="stat-row-label">Node Runtime</span>
+                        <span className="stat-row-value">{nodeProc?.version}</span>
+                      </div>
+                      <div className="stat-row">
+                        <span className="stat-row-label">Process Uptime</span>
+                        <span className="stat-row-value">{formatUptime(nodeProc?.uptimeSeconds || liveMetrics.uptimeSeconds || 0)}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* CARD 3: DATABASE & APP STATUS */}
+                  <div className="card" style={{ padding: "18px" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                      <h4 style={{ fontSize: "13px", color: "var(--success)", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                        🍃 MongoDB Database
+                      </h4>
+                      <span className="badge badge-status-2xx">{systemStats?.database?.status || "connected"}</span>
+                    </div>
+
+                    <div style={{ marginTop: "12px", display: "grid", gap: "8px", fontSize: "13px" }}>
+                      <div className="stat-row">
+                        <span className="stat-row-label">Database Name</span>
+                        <span className="stat-row-value">{systemStats?.database?.name || (loadingStats ? "Connecting..." : "—")}</span>
+                      </div>
+                      <div className="stat-row">
+                        <span className="stat-row-label">Cluster Host</span>
+                        <span className="stat-row-value" style={{ fontSize: "11px" }}>{systemStats?.database?.host || (loadingStats ? "Connecting..." : "—")}</span>
+                      </div>
+                      <div className="stat-row">
+                        <span className="stat-row-label">Registered Users</span>
+                        <span className="stat-row-value">{systemStats?.database?.totalUsers || 0}</span>
+                      </div>
+                      <div className="stat-row">
+                        <span className="stat-row-label">Total Request Logs</span>
+                        <span className="stat-row-value">{systemStats?.database?.totalRequestLogs || 0}</span>
+                      </div>
+                      <div className="stat-row">
+                        <span className="stat-row-label">Total DB Audit Logs</span>
+                        <span className="stat-row-value">{systemStats?.database?.totalDbLogs || 0}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* CARD 4: RESOURCE CONCEPTS CHEAT SHEET */}
+              <div style={{ marginTop: "16px", padding: "16px", borderRadius: "12px", background: "var(--bg-surface-elevated)", border: "1px solid var(--border-subtle)" }}>
+                <h4 style={{ fontSize: "13px", fontWeight: 700, color: "var(--text-primary)", display: "flex", alignItems: "center", gap: "8px" }}>
+                  <span>💡</span> Resource Guide: Host vs. Node.js Process Memory
+                </h4>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: "12px", marginTop: "10px", fontSize: "12px", color: "var(--text-secondary)", lineHeight: "1.5" }}>
+                  <div>
+                    <strong style={{ color: "var(--text-primary)" }}>🖥️ Host Used vs. Available RAM:</strong>
+                    <div>Total physical RAM installed on the machine/VPS, how much is consumed across all operating system processes, and how much is immediately free/available.</div>
+                  </div>
+                  <div>
+                    <strong style={{ color: "var(--text-primary)" }}>🟢 Total Process Memory (RSS):</strong>
+                    <div>Resident Set Size: The exact amount of host physical RAM currently occupied by this specific Node.js process (including executable code, heap, stack, and C++ buffers).</div>
+                  </div>
+                  <div>
+                    <strong style={{ color: "var(--text-primary)" }}>🧠 V8 JS Heap (Used vs. Total):</strong>
+                    <div>Memory allocated inside the V8 engine specifically for JavaScript objects, closures, and strings. When Heap Used approaches Heap Total, V8 triggers Garbage Collection.</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 3: DAILY HTML FILE LOGS */}
+          {activeTab === "files" && (
+            <div className="card">
+              <div className="toolbar-filter">
+                <div className="filter-controls">
+                  <input
+                    type="text"
+                    className="input-field"
+                    placeholder="Search file name..."
+                    value={fileLogsSearch}
+                    onChange={(e) => setFileLogsSearch(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && loadFileLogs(1, fileLogsPagination.limit)}
+                    style={{ minWidth: "180px" }}
+                  />
+                  <select
+                    className="select-field"
+                    value={fileLogsSortBy}
+                    onChange={(e) => setFileLogsSortBy(e.target.value)}
+                  >
+                    <option value="date">Sort: Date</option>
+                    <option value="size">Sort: Size</option>
+                    <option value="updatedAt">Sort: Last Modified</option>
+                  </select>
+                  <select
+                    className="select-field"
+                    value={fileLogsOrder}
+                    onChange={(e) => setFileLogsOrder(e.target.value)}
+                  >
+                    <option value="desc">Order: Newest First</option>
+                    <option value="asc">Order: Oldest First</option>
+                  </select>
+                  <button className="btn btn-primary" onClick={() => loadFileLogs(1, fileLogsPagination.limit)}>
+                    Filter
+                  </button>
+                  {fileLogsSearch && (
+                    <button
+                      className="btn btn-secondary"
+                      onClick={() => { setFileLogsSearch(""); setTimeout(() => loadFileLogs(1, fileLogsPagination.limit), 0); }}
+                    >
+                      Clear
+                    </button>
+                  )}
+                </div>
+
+                <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                  <input
+                    type="date"
+                    className="input-field"
+                    value={selectedDate}
+                    onChange={(e) => setSelectedDate(e.target.value)}
+                  />
+                  <button className="btn btn-warning" onClick={() => openLogViewer("date", selectedDate)}>
+                    Open Date
+                  </button>
+                  <button className="btn btn-primary" onClick={() => openLogViewer("recent", "true")}>
+                    Open Recent
+                  </button>
+                </div>
+              </div>
+
+              <div className="table-container">
+                <table>
+                  <thead>
+                    <tr>
+                      <th
+                        className="sortable"
+                        onClick={() => toggleSort(fileLogsSortBy, fileLogsOrder, "date", setFileLogsSortBy, setFileLogsOrder)}
+                      >
+                        File Name {renderSortIcon(fileLogsSortBy, fileLogsOrder, "date")}
+                      </th>
+                      <th
+                        className="sortable"
+                        onClick={() => toggleSort(fileLogsSortBy, fileLogsOrder, "size", setFileLogsSortBy, setFileLogsOrder)}
+                      >
+                        File Size {renderSortIcon(fileLogsSortBy, fileLogsOrder, "size")}
+                      </th>
+                      <th
+                        className="sortable"
+                        onClick={() => toggleSort(fileLogsSortBy, fileLogsOrder, "updatedAt", setFileLogsSortBy, setFileLogsOrder)}
+                      >
+                        Last Modified {renderSortIcon(fileLogsSortBy, fileLogsOrder, "updatedAt")}
+                      </th>
+                      <th>Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {fileLogs.length === 0 ? (
+                      <tr>
+                        <td colSpan="4" className="empty-state">
+                          {loadingFiles ? "Loading log files from server..." : "No log files match your query."}
+                        </td>
+                      </tr>
+                    ) : (
+                      fileLogs.map((file) => (
+                        <tr key={file.fileName}>
+                          <td className="code-text" style={{ fontWeight: 600 }}>{file.fileName}</td>
+                          <td>{(file.size / 1024).toFixed(1)} KB ({file.size} bytes)</td>
+                          <td style={{ color: "var(--text-muted)" }}>
+                            {new Date(file.updatedAt).toLocaleString()}
+                          </td>
+                          <td>
+                            <button
+                              className="btn btn-primary"
+                              style={{ height: "28px", padding: "0 10px", fontSize: "11px" }}
+                              onClick={() => openLogViewer("file", file.fileName)}
+                            >
+                              Open Viewer ↗
+                            </button>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              <Pagination
+                pagination={fileLogsPagination}
+                onPageChange={(p) => loadFileLogs(p, fileLogsPagination.limit)}
+                onLimitChange={(l) => loadFileLogs(1, l)}
+              />
+            </div>
+          )}
+
+          {/* TAB 4: MONGODB REQUEST LOGS */}
+          {activeTab === "db-requests" && (
+            <div className="card">
+              <div className="toolbar-filter">
+                <div className="filter-controls">
+                  <input
+                    type="text"
+                    className="input-field"
+                    placeholder="Search URL, IP, errors..."
+                    value={dbRequestSearch}
+                    onChange={(e) => setDbRequestSearch(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && loadDbRequestLogs(1, dbRequestPagination.limit)}
+                    style={{ minWidth: "190px" }}
+                  />
+                  <select
+                    className="select-field"
+                    value={dbRequestMethod}
+                    onChange={(e) => setDbRequestMethod(e.target.value)}
+                  >
+                    <option value="">All Methods</option>
+                    <option value="GET">GET</option>
+                    <option value="POST">POST</option>
+                    <option value="PUT">PUT</option>
+                    <option value="DELETE">DELETE</option>
+                    <option value="PATCH">PATCH</option>
+                  </select>
+                  <select
+                    className="select-field"
+                    value={dbRequestStatus}
+                    onChange={(e) => setDbRequestStatus(e.target.value)}
+                  >
+                    <option value="">All Statuses</option>
+                    <option value="Successful">Successful</option>
+                    <option value="Failed">Failed</option>
+                  </select>
+                  <select
+                    className="select-field"
+                    value={dbRequestStatusCode}
+                    onChange={(e) => setDbRequestStatusCode(e.target.value)}
+                  >
+                    <option value="">All Status Codes</option>
+                    <option value="200">200 OK</option>
+                    <option value="201">201 Created</option>
+                    <option value="400">400 Bad Request</option>
+                    <option value="401">401 Unauthorized</option>
+                    <option value="403">403 Forbidden</option>
+                    <option value="404">404 Not Found</option>
+                    <option value="500">500 Server Error</option>
+                  </select>
+                  <select
+                    className="select-field"
+                    value={dbRequestSortBy}
+                    onChange={(e) => setDbRequestSortBy(e.target.value)}
+                  >
+                    <option value="createdAt">Sort: Created Date</option>
+                    <option value="responseStatus">Sort: Status Code</option>
+                    <option value="requestMethod">Sort: Method</option>
+                    <option value="requestUrl">Sort: URL</option>
+                  </select>
+                  <select
+                    className="select-field"
+                    value={dbRequestOrder}
+                    onChange={(e) => setDbRequestOrder(e.target.value)}
+                  >
+                    <option value="desc">Desc</option>
+                    <option value="asc">Asc</option>
+                  </select>
+                  <button className="btn btn-primary" onClick={() => loadDbRequestLogs(1, dbRequestPagination.limit)}>
+                    Apply
+                  </button>
+                  {(dbRequestSearch || dbRequestMethod || dbRequestStatus || dbRequestStatusCode) && (
+                    <button
+                      className="btn btn-secondary"
+                      onClick={() => {
+                        setDbRequestSearch("");
+                        setDbRequestMethod("");
+                        setDbRequestStatus("");
+                        setDbRequestStatusCode("");
+                        setTimeout(() => loadDbRequestLogs(1, dbRequestPagination.limit), 0);
+                      }}
+                    >
+                      Reset
+                    </button>
+                  )}
+                </div>
+
+                <button className="btn btn-secondary" onClick={() => loadDbRequestLogs()} disabled={loadingDbRequests}>
+                  {loadingDbRequests ? "Loading..." : "🔄 Refresh"}
+                </button>
+              </div>
+
+              <div className="table-container">
+                <table>
+                  <thead>
+                    <tr>
+                      <th
+                        className="sortable"
+                        onClick={() => toggleSort(dbRequestSortBy, dbRequestOrder, "createdAt", setDbRequestSortBy, setDbRequestOrder)}
+                      >
+                        Created At {renderSortIcon(dbRequestSortBy, dbRequestOrder, "createdAt")}
+                      </th>
+                      <th
+                        className="sortable"
+                        onClick={() => toggleSort(dbRequestSortBy, dbRequestOrder, "requestMethod", setDbRequestSortBy, setDbRequestOrder)}
+                      >
+                        Method {renderSortIcon(dbRequestSortBy, dbRequestOrder, "requestMethod")}
+                      </th>
+                      <th
+                        className="sortable"
+                        onClick={() => toggleSort(dbRequestSortBy, dbRequestOrder, "requestUrl", setDbRequestSortBy, setDbRequestOrder)}
+                      >
+                        URL {renderSortIcon(dbRequestSortBy, dbRequestOrder, "requestUrl")}
+                      </th>
+                      <th
+                        className="sortable"
+                        onClick={() => toggleSort(dbRequestSortBy, dbRequestOrder, "responseStatus", setDbRequestSortBy, setDbRequestOrder)}
+                      >
+                        Status {renderSortIcon(dbRequestSortBy, dbRequestOrder, "responseStatus")}
+                      </th>
+                      <th>Client IP</th>
+                      <th>User</th>
+                      <th>Details</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {dbRequestLogs.length === 0 ? (
+                      <tr>
+                        <td colSpan="7" className="empty-state">
+                          {loadingDbRequests ? "Loading MongoDB request logs..." : "No logs match your filter criteria."}
+                        </td>
+                      </tr>
+                    ) : (
+                      dbRequestLogs.map((log) => (
+                        <tr key={log._id}>
+                          <td className="code-text" style={{ fontSize: "12px" }}>
+                            {new Date(log.createdAt).toLocaleString()}
+                          </td>
+                          <td>
+                            <span className={`badge ${getMethodBadgeClass(log.requestMethod)}`}>
+                              {log.requestMethod}
+                            </span>
+                          </td>
+                          <td className="code-text" style={{ maxWidth: "280px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                            {log.requestUrl}
+                          </td>
+                          <td>
+                            <span className={`badge ${getStatusBadgeClass(log.responseStatus)}`}>
+                              {log.responseStatus || log.requestStatus}
+                            </span>
+                          </td>
+                          <td className="code-text" style={{ fontSize: "12px" }}>
+                            {log.ipAddress?.clientIp || "-"}
+                          </td>
+                          <td>
+                            {log.user ? (
+                              <span style={{ fontSize: "12px", color: "var(--primary)" }}>
+                                {log.user.email || log.user}
+                              </span>
+                            ) : (
+                              <span style={{ color: "var(--text-muted)", fontSize: "12px" }}>Guest</span>
+                            )}
+                          </td>
+                          <td>
+                            <button
+                              className="btn btn-secondary"
+                              style={{ height: "26px", padding: "0 8px", fontSize: "11px" }}
+                              onClick={() => setInspectItem(log)}
+                            >
+                              Inspect
+                            </button>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              <Pagination
+                pagination={dbRequestPagination}
+                onPageChange={(p) => loadDbRequestLogs(p, dbRequestPagination.limit)}
+                onLimitChange={(l) => loadDbRequestLogs(1, l)}
+              />
+            </div>
+          )}
+
+          {/* TAB 5: MONGODB AUDIT TRAIL */}
+          {activeTab === "db-audits" && (
+            <div className="card">
+              <div className="toolbar-filter">
+                <div className="filter-controls">
+                  <input
+                    type="text"
+                    className="input-field"
+                    placeholder="Search details or collection..."
+                    value={dbAuditSearch}
+                    onChange={(e) => setDbAuditSearch(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && loadDbAuditLogs(1, dbAuditPagination.limit)}
+                    style={{ minWidth: "190px" }}
+                  />
+                  <select
+                    className="select-field"
+                    value={dbAuditCollection}
+                    onChange={(e) => setDbAuditCollection(e.target.value)}
+                  >
+                    <option value="">All Collections</option>
+                    {availableCollections.map((col) => (
+                      <option key={col} value={col}>{col}</option>
+                    ))}
+                  </select>
+                  <select
+                    className="select-field"
+                    value={dbAuditType}
+                    onChange={(e) => setDbAuditType(e.target.value)}
+                  >
+                    <option value="">All Mutation Types</option>
+                    <option value="insert">INSERT</option>
+                    <option value="update">UPDATE</option>
+                    <option value="delete">DELETE</option>
+                  </select>
+                  <select
+                    className="select-field"
+                    value={dbAuditStatus}
+                    onChange={(e) => setDbAuditStatus(e.target.value)}
+                  >
+                    <option value="">All Statuses</option>
+                    <option value="success">Success</option>
+                    <option value="failed">Failed</option>
+                  </select>
+                  <select
+                    className="select-field"
+                    value={dbAuditSortBy}
+                    onChange={(e) => setDbAuditSortBy(e.target.value)}
+                  >
+                    <option value="createdAt">Sort: Time</option>
+                    <option value="transactionType">Sort: Mutation Type</option>
+                    <option value="affectedCollection">Sort: Collection</option>
+                    <option value="status">Sort: Status</option>
+                  </select>
+                  <select
+                    className="select-field"
+                    value={dbAuditOrder}
+                    onChange={(e) => setDbAuditOrder(e.target.value)}
+                  >
+                    <option value="desc">Desc</option>
+                    <option value="asc">Asc</option>
+                  </select>
+                  <button className="btn btn-primary" onClick={() => loadDbAuditLogs(1, dbAuditPagination.limit)}>
+                    Apply
+                  </button>
+                  {(dbAuditSearch || dbAuditCollection || dbAuditType || dbAuditStatus) && (
+                    <button
+                      className="btn btn-secondary"
+                      onClick={() => {
+                        setDbAuditSearch("");
+                        setDbAuditCollection("");
+                        setDbAuditType("");
+                        setDbAuditStatus("");
+                        setTimeout(() => loadDbAuditLogs(1, dbAuditPagination.limit), 0);
+                      }}
+                    >
+                      Reset
+                    </button>
+                  )}
+                </div>
+
+                <button className="btn btn-secondary" onClick={() => loadDbAuditLogs()} disabled={loadingDbAudits}>
+                  {loadingDbAudits ? "Loading..." : "🔄 Refresh"}
+                </button>
+              </div>
+
+              <div className="table-container">
+                <table>
+                  <thead>
+                    <tr>
+                      <th
+                        className="sortable"
+                        onClick={() => toggleSort(dbAuditSortBy, dbAuditOrder, "createdAt", setDbAuditSortBy, setDbAuditOrder)}
+                      >
+                        Time {renderSortIcon(dbAuditSortBy, dbAuditOrder, "createdAt")}
+                      </th>
+                      <th
+                        className="sortable"
+                        onClick={() => toggleSort(dbAuditSortBy, dbAuditOrder, "transactionType", setDbAuditSortBy, setDbAuditOrder)}
+                      >
+                        Mutation Type {renderSortIcon(dbAuditSortBy, dbAuditOrder, "transactionType")}
+                      </th>
+                      <th
+                        className="sortable"
+                        onClick={() => toggleSort(dbAuditSortBy, dbAuditOrder, "affectedCollection", setDbAuditSortBy, setDbAuditOrder)}
+                      >
+                        Collection {renderSortIcon(dbAuditSortBy, dbAuditOrder, "affectedCollection")}
+                      </th>
+                      <th
+                        className="sortable"
+                        onClick={() => toggleSort(dbAuditSortBy, dbAuditOrder, "status", setDbAuditSortBy, setDbAuditOrder)}
+                      >
+                        Status {renderSortIcon(dbAuditSortBy, dbAuditOrder, "status")}
+                      </th>
+                      <th>Transaction Details</th>
+                      <th>Inspect</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {dbAuditLogs.length === 0 ? (
+                      <tr>
+                        <td colSpan="6" className="empty-state">
+                          {loadingDbAudits ? "Loading MongoDB audit records..." : "No audit records match the current filters."}
+                        </td>
+                      </tr>
+                    ) : (
+                      dbAuditLogs.map((log) => (
+                        <tr key={log._id}>
+                          <td className="code-text" style={{ fontSize: "12px" }}>
+                            {new Date(log.createdAt).toLocaleString()}
+                          </td>
+                          <td>
+                            <span className={`badge ${log.transactionType === "insert" ? "badge-post" : log.transactionType === "update" ? "badge-put" : "badge-delete"}`}>
+                              {log.transactionType?.toUpperCase()}
+                            </span>
+                          </td>
+                          <td style={{ fontWeight: 600 }}>{log.affectedCollection}</td>
+                          <td>
+                            <span className="badge badge-status-2xx">{log.status}</span>
+                          </td>
+                          <td style={{ fontSize: "12px", color: "var(--text-secondary)", maxWidth: "300px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                            {log.transactionDetails || "-"}
+                          </td>
+                          <td>
+                            <button
+                              className="btn btn-secondary"
+                              style={{ height: "26px", padding: "0 8px", fontSize: "11px" }}
+                              onClick={() => setInspectItem(log)}
+                            >
+                              Diff / Data
+                            </button>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              <Pagination
+                pagination={dbAuditPagination}
+                onPageChange={(p) => loadDbAuditLogs(p, dbAuditPagination.limit)}
+                onLimitChange={(l) => loadDbAuditLogs(1, l)}
+              />
+            </div>
+          )}
+
+          {/* TAB 6: MODEL VERSIONS & LIFECYCLE */}
+          {activeTab === "versions" && (
+            <div className="card">
+              {/* TOP TOOLBAR */}
+              <div className="toolbar-filter">
+                <div className="filter-controls">
+                  <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                    <span style={{ fontSize: "12px", fontWeight: 700, color: "var(--text-secondary)" }}>Model:</span>
+                    <select
+                      className="select-field"
+                      style={{ fontWeight: 700 }}
+                      value={selectedModel}
+                      onChange={(e) => {
+                        setSelectedModel(e.target.value);
+                        loadModelDocs(e.target.value, 1, modelDocsPagination.limit, modelDocsStatus, modelDocsSearch);
+                      }}
+                    >
+                      {availableModels.map((m) => (
+                        <option key={m} value={m}>{m}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <input
+                    type="text"
+                    className="input-field"
+                    placeholder={`Search in ${selectedModel}...`}
+                    value={modelDocsSearch}
+                    onChange={(e) => setModelDocsSearch(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && loadModelDocs(selectedModel, 1, modelDocsPagination.limit, modelDocsStatus, modelDocsSearch)}
+                    style={{ minWidth: "180px" }}
+                  />
+
+                  <select
+                    className="select-field"
+                    value={modelDocsStatus}
+                    onChange={(e) => {
+                      setModelDocsStatus(e.target.value);
+                      loadModelDocs(selectedModel, 1, modelDocsPagination.limit, e.target.value, modelDocsSearch);
+                    }}
+                  >
+                    <option value="all">Status: All Records</option>
+                    <option value="active">Status: Active Only</option>
+                    <option value="deleted">Status: Deleted Only (Resurrectable)</option>
+                  </select>
+
+                  <button
+                    className="btn btn-primary"
+                    onClick={() => loadModelDocs(selectedModel, 1, modelDocsPagination.limit, modelDocsStatus, modelDocsSearch)}
+                  >
+                    Filter
+                  </button>
+                  {modelDocsSearch && (
+                    <button
+                      className="btn btn-secondary"
+                      onClick={() => {
+                        setModelDocsSearch("");
+                        loadModelDocs(selectedModel, 1, modelDocsPagination.limit, modelDocsStatus, "");
+                      }}
+                    >
+                      Clear
+                    </button>
+                  )}
+                </div>
+
+                <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                  <span className="badge badge-status-2xx" title="Active live documents in MongoDB">
+                    Active: {modelDocsCounts.active}
+                  </span>
+                  <span className="badge badge-status-5xx" title="Deleted documents available for instant resurrection">
+                    Deleted: {modelDocsCounts.deleted}
+                  </span>
+                  <button
+                    className="btn btn-secondary"
+                    onClick={() => loadModelDocs(selectedModel, modelDocsPagination.page)}
+                    disabled={loadingModelDocs}
+                  >
+                    {loadingModelDocs ? "Loading..." : "🔄 Refresh"}
+                  </button>
+                </div>
+              </div>
+
+              {/* TABLE */}
+              <div className="table-container">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Document Identifier & Title</th>
+                      <th>Status</th>
+                      <th>Version</th>
+                      <th>Last Modified / Deleted</th>
+                      <th>Latest Commit Summary</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {loadingModelDocs ? (
+                      <tr>
+                        <td colSpan="6" className="empty-state">Loading {selectedModel} documents...</td>
+                      </tr>
+                    ) : modelDocs.length === 0 ? (
+                      <tr>
+                        <td colSpan="6" className="empty-state">No documents found for {selectedModel}</td>
+                      </tr>
+                    ) : (
+                      modelDocs.map((doc) => (
+                        <tr key={doc._id} style={{ opacity: doc.status === "deleted" ? 0.75 : 1 }}>
+                          <td>
+                            <div style={{ fontWeight: 700, color: "var(--text-primary)" }}>
+                              {doc.displayTitle || "Untitled"}
+                            </div>
+                            <div className="code-text" style={{ fontSize: "11px", color: "var(--text-muted)" }}>
+                              ID: {doc._id}
+                            </div>
+                          </td>
+                          <td>
+                            <span className={`badge ${doc.status === "active" ? "badge-status-2xx" : "badge-status-5xx"}`}>
+                              {doc.status === "active" ? "● Active" : "✕ Deleted"}
+                            </span>
+                          </td>
+                          <td>
+                            <span className="badge badge-method-get" style={{ fontWeight: 800 }}>
+                              v{doc.currentVersion}
+                            </span>
+                          </td>
+                          <td style={{ fontSize: "12px", whiteSpace: "nowrap" }}>
+                            {new Date(doc.updatedAt).toLocaleString()}
+                          </td>
+                          <td style={{ fontSize: "12px", color: "var(--text-secondary)", maxWidth: "260px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                            {doc.summary || "-"}
+                          </td>
+                          <td>
+                            <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+                              <button
+                                className="btn btn-secondary"
+                                style={{ height: "26px", padding: "0 8px", fontSize: "11px" }}
+                                onClick={() => openDocHistory(selectedModel, doc._id, doc.displayTitle)}
+                                title="View chronological commit history"
+                              >
+                                🕒 History
+                              </button>
+                              <button
+                                className="btn btn-secondary"
+                                style={{ height: "26px", padding: "0 8px", fontSize: "11px" }}
+                                onClick={() => openCompareModal(selectedModel, doc._id, doc.displayTitle, doc.currentVersion)}
+                                title="Compare revisions with Git Diff Tree"
+                              >
+                                🔀 Compare
+                              </button>
+                              <button
+                                className={`btn ${doc.status === "deleted" ? "btn-warning" : "btn-secondary"}`}
+                                style={{ height: "26px", padding: "0 8px", fontSize: "11px" }}
+                                onClick={() => setRollbackTarget({
+                                  modelName: selectedModel,
+                                  docId: doc._id,
+                                  title: doc.displayTitle,
+                                  version: doc.status === "deleted" ? Math.max(1, doc.currentVersion - 1) : Math.max(1, doc.currentVersion - 1),
+                                  isDeleted: doc.status === "deleted",
+                                  maxVersion: doc.currentVersion,
+                                })}
+                                title={doc.status === "deleted" ? "Resurrect deleted document" : "Rollback to previous version"}
+                              >
+                                {doc.status === "deleted" ? "♻️ Restore" : "⏪ Revert"}
+                              </button>
+                              <button
+                                className="btn btn-secondary"
+                                style={{ height: "26px", padding: "0 8px", fontSize: "11px" }}
+                                onClick={() => setInspectItem(doc.rawDoc || doc)}
+                                title="Inspect structured JSON"
+                              >
+                                {`{ }`}
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              <Pagination
+                pagination={modelDocsPagination}
+                onPageChange={(p) => loadModelDocs(selectedModel, p)}
+                onLimitChange={(l) => loadModelDocs(selectedModel, 1, l)}
+              />
+            </div>
+          )}
+
+          {/* INSPECT MODAL WITH INTERACTIVE JSON VIEWER */}
+          {inspectItem && (
+            <div className="modal-backdrop" onClick={() => setInspectItem(null)}>
+              <div className="modal-card" onClick={(e) => e.stopPropagation()} style={{ maxWidth: "800px", width: "95%" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <h3 style={{ fontSize: "16px", fontWeight: 700 }}>Record Inspector</h3>
+                  <button className="btn btn-secondary" onClick={() => setInspectItem(null)}>✕ Close</button>
+                </div>
+                <JsonViewer data={inspectItem} title="Structured Data Tree" />
+              </div>
+            </div>
+          )}
+
+          {/* DOCUMENT HISTORY & COMMITS MODAL */}
+          {historyDoc && (
+            <div className="modal-backdrop" onClick={() => setHistoryDoc(null)}>
+              <div className="modal-card" onClick={(e) => e.stopPropagation()} style={{ maxWidth: "850px", width: "95%", maxHeight: "90vh", overflow: "auto" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", borderBottom: "1px solid var(--border-subtle)", paddingBottom: "12px" }}>
+                  <div>
+                    <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                      <h3 style={{ fontSize: "17px", fontWeight: 800 }}>Document Commit History</h3>
+                      <span className="badge badge-method-get">{historyDoc.modelName}</span>
+                      <span className={`badge ${docHistoryData?.currentStatus === "active" ? "badge-status-2xx" : "badge-status-5xx"}`}>
+                        {docHistoryData?.currentStatus === "active" ? "● Active" : "✕ Currently Deleted"}
+                      </span>
+                    </div>
+                    <div style={{ fontSize: "13px", color: "var(--text-secondary)", marginTop: "4px" }}>
+                      <strong>{historyDoc.title}</strong> <span className="code-text" style={{ fontSize: "11px" }}>({historyDoc.docId})</span>
+                    </div>
+                  </div>
+                  <button className="btn btn-secondary" onClick={() => setHistoryDoc(null)}>✕ Close</button>
+                </div>
+
+                {loadingHistory ? (
+                  <div className="empty-state">Loading revision commits...</div>
+                ) : !docHistoryData || docHistoryData.commits?.length === 0 ? (
+                  <div className="empty-state">No version commits recorded for this document.</div>
+                ) : (
+                  <div>
+                    <div style={{ fontSize: "12px", color: "var(--text-secondary)", margin: "14px 0 6px" }}>
+                      Showing <strong>{docHistoryData.commits.length}</strong> revisions in chronological order:
+                    </div>
+
+                    <div className="timeline-list">
+                      {docHistoryData.commits.map((commit) => (
+                        <div key={commit._id} className="timeline-card">
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "8px" }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                              <span className="badge badge-method-get" style={{ fontWeight: 800, fontSize: "13px" }}>
+                                v{commit.version}
+                              </span>
+                              <span className={`badge ${
+                                commit.transactionType === "insert" ? "badge-status-2xx" :
+                                commit.transactionType === "delete" ? "badge-status-5xx" :
+                                commit.transactionType === "rollback" ? "badge-warning" : "badge-method-put"
+                              }`}>
+                                {commit.transactionType?.toUpperCase()}
+                              </span>
+                              <span style={{ fontSize: "13px", fontWeight: 600, color: "var(--text-primary)" }}>
+                                {commit.summary || commit.transactionDetails}
+                              </span>
+                            </div>
+
+                            <div style={{ display: "flex", gap: "6px" }}>
+                              <button
+                                className="btn btn-secondary"
+                                style={{ height: "26px", fontSize: "11px", padding: "0 8px" }}
+                                onClick={() => loadReconstructedVersion(historyDoc.modelName, historyDoc.docId, commit.version)}
+                              >
+                                {selectedHistoryVersion === commit.version ? "Viewing State" : "Reconstruct State"}
+                              </button>
+                              <button
+                                className="btn btn-warning"
+                                style={{ height: "26px", fontSize: "11px", padding: "0 8px" }}
+                                onClick={() => setRollbackTarget({
+                                  modelName: historyDoc.modelName,
+                                  docId: historyDoc.docId,
+                                  title: historyDoc.title,
+                                  version: commit.version,
+                                  isDeleted: docHistoryData.currentStatus === "deleted",
+                                  maxVersion: docHistoryData.latestVersion,
+                                })}
+                              >
+                                Rollback to v{commit.version}
+                              </button>
+                            </div>
+                          </div>
+
+                          <div style={{ display: "flex", justifyContent: "space-between", fontSize: "11px", color: "var(--text-muted)" }}>
+                            <span>Author: {commit.user?.email || "System"} | IP: {commit.ipAddress || "Internal"}</span>
+                            <span>{new Date(commit.createdAt).toLocaleString()}</span>
+                          </div>
+
+                          {/* Render commit changes if update */}
+                          {commit.diff?.changes?.length > 0 && (
+                            <div className="diff-tree">
+                              {commit.diff.changes.map((ch, idx) => (
+                                <div key={idx} className={`diff-item ${ch.type}`}>
+                                  <span className={`diff-badge ${ch.type}`}>
+                                    {ch.type === "added" ? "+" : ch.type === "modified" ? "~" : "-"}
+                                  </span>
+                                  <div style={{ flex: 1 }}>
+                                    <span className="diff-field-name">{ch.field}: </span>
+                                    {ch.type === "modified" && (
+                                      <span>
+                                        <span className="diff-val-old">{typeof ch.oldValue === "object" ? JSON.stringify(ch.oldValue) : String(ch.oldValue)}</span>
+                                        <span> → </span>
+                                        <span className="diff-val-new">{typeof ch.newValue === "object" ? JSON.stringify(ch.newValue) : String(ch.newValue)}</span>
+                                      </span>
+                                    )}
+                                    {ch.type === "added" && (
+                                      <span className="diff-val-new">{typeof ch.newValue === "object" ? JSON.stringify(ch.newValue) : String(ch.newValue)}</span>
+                                    )}
+                                    {ch.type === "deleted" && (
+                                      <span className="diff-val-old">{typeof ch.oldValue === "object" ? JSON.stringify(ch.oldValue) : String(ch.oldValue)}</span>
+                                    )}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Preview Reconstructed State */}
+                    {reconstructedVersionData && (
+                      <div style={{ marginTop: "18px", borderTop: "1px solid var(--border-subtle)", paddingTop: "14px" }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+                          <h4 style={{ fontSize: "14px", fontWeight: 700 }}>
+                            Reconstructed Document at Version {selectedHistoryVersion}
+                          </h4>
+                          <button className="btn btn-secondary" style={{ height: "24px", fontSize: "11px" }} onClick={() => setReconstructedVersionData(null)}>
+                            Hide Preview
+                          </button>
+                        </div>
+                        <JsonViewer data={reconstructedVersionData.state} title={`Document State @ v${selectedHistoryVersion}`} />
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* VERSION COMPARE / GIT DIFF TREE MODAL */}
+          {compareDoc && (
+            <div className="modal-backdrop" onClick={() => setCompareDoc(null)}>
+              <div className="modal-card" onClick={(e) => e.stopPropagation()} style={{ maxWidth: "900px", width: "95%", maxHeight: "90vh", overflow: "auto" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid var(--border-subtle)", paddingBottom: "12px" }}>
+                  <div>
+                    <h3 style={{ fontSize: "17px", fontWeight: 800 }}>Git-Like Version Comparator</h3>
+                    <div style={{ fontSize: "13px", color: "var(--text-secondary)", marginTop: "2px" }}>
+                      Comparing revisions for <strong>{compareDoc.title}</strong> ({compareDoc.modelName})
+                    </div>
+                  </div>
+                  <button className="btn btn-secondary" onClick={() => setCompareDoc(null)}>✕ Close</button>
+                </div>
+
+                {/* VERSION SELECTOR TOOLBAR */}
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", margin: "14px 0", flexWrap: "wrap", gap: "10px" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                    <span style={{ fontSize: "13px", fontWeight: 700 }}>Base:</span>
+                    <select
+                      className="select-field"
+                      value={compareV1}
+                      onChange={(e) => {
+                        const val = parseInt(e.target.value, 10);
+                        setCompareV1(val);
+                        executeCompare(val, compareV2);
+                      }}
+                    >
+                      {Array.from({ length: Math.max(1, compareDoc.maxVersion || 1) }, (_, i) => i + 1).map((v) => (
+                        <option key={v} value={v}>Version {v}</option>
+                      ))}
+                    </select>
+
+                    <span style={{ fontSize: "14px", fontWeight: 700, color: "var(--text-muted)" }}>⇄</span>
+
+                    <span style={{ fontSize: "13px", fontWeight: 700 }}>Target:</span>
+                    <select
+                      className="select-field"
+                      value={compareV2}
+                      onChange={(e) => {
+                        const val = parseInt(e.target.value, 10);
+                        setCompareV2(val);
+                        executeCompare(compareV1, val);
+                      }}
+                    >
+                      {Array.from({ length: Math.max(1, compareDoc.maxVersion || 1) }, (_, i) => i + 1).map((v) => (
+                        <option key={v} value={v}>Version {v}</option>
+                      ))}
+                    </select>
+
+                    <button className="btn btn-primary" onClick={() => executeCompare(compareV1, compareV2)} disabled={loadingCompare}>
+                      {loadingCompare ? "Diffing..." : "Compare"}
+                    </button>
+                  </div>
+
+                  <div style={{ display: "flex", gap: "6px" }}>
+                    <button
+                      className={`btn ${compareViewTab === "diff" ? "btn-primary" : "btn-secondary"}`}
+                      style={{ height: "28px", fontSize: "12px", padding: "0 10px" }}
+                      onClick={() => setCompareViewTab("diff")}
+                    >
+                      Git Diff Tree ({compareData?.diff?.totalChanges || 0})
+                    </button>
+                    <button
+                      className={`btn ${compareViewTab === "json" ? "btn-primary" : "btn-secondary"}`}
+                      style={{ height: "28px", fontSize: "12px", padding: "0 10px" }}
+                      onClick={() => setCompareViewTab("json")}
+                    >
+                      Side-by-Side JSON
+                    </button>
+                  </div>
+                </div>
+
+                {loadingCompare ? (
+                  <div className="empty-state">Computing deep diff...</div>
+                ) : !compareData ? (
+                  <div className="empty-state">Select versions to compare.</div>
+                ) : (
+                  <div>
+                    <div style={{ display: "flex", gap: "10px", alignItems: "center", marginBottom: "12px", fontSize: "13px" }}>
+                      <span className="badge badge-status-2xx">+{compareData.diff?.addedCount || 0} Added</span>
+                      <span className="badge badge-warning">~{compareData.diff?.modifiedCount || 0} Modified</span>
+                      <span className="badge badge-status-5xx">-{compareData.diff?.deletedCount || 0} Deleted</span>
+                      <span style={{ color: "var(--text-secondary)", fontSize: "12px" }}>
+                        {compareData.diff?.summary}
+                      </span>
+                    </div>
+
+                    {compareViewTab === "diff" ? (
+                      <div className="diff-tree">
+                        {compareData.diff?.changes?.length === 0 ? (
+                          <div className="empty-state" style={{ padding: "20px" }}>
+                            ✓ Versions {compareV1} and {compareV2} are identical in content!
+                          </div>
+                        ) : (
+                          compareData.diff.changes.map((ch, idx) => (
+                            <div key={idx} className={`diff-item ${ch.type}`}>
+                              <span className={`diff-badge ${ch.type}`}>
+                                {ch.type === "added" ? "+" : ch.type === "modified" ? "~" : "-"}
+                              </span>
+                              <div style={{ flex: 1 }}>
+                                <span className="diff-field-name">{ch.field}: </span>
+                                {ch.type === "modified" && (
+                                  <span>
+                                    <span className="diff-val-old">{typeof ch.oldValue === "object" ? JSON.stringify(ch.oldValue) : String(ch.oldValue)}</span>
+                                    <span> → </span>
+                                    <span className="diff-val-new">{typeof ch.newValue === "object" ? JSON.stringify(ch.newValue) : String(ch.newValue)}</span>
+                                  </span>
+                                )}
+                                {ch.type === "added" && (
+                                  <span className="diff-val-new">{typeof ch.newValue === "object" ? JSON.stringify(ch.newValue) : String(ch.newValue)}</span>
+                                )}
+                                {ch.type === "deleted" && (
+                                  <span className="diff-val-old">{typeof ch.oldValue === "object" ? JSON.stringify(ch.oldValue) : String(ch.oldValue)}</span>
+                                )}
+                              </div>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    ) : (
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+                        <JsonViewer data={compareData.v1?.state} title={`Version ${compareV1}`} />
+                        <JsonViewer data={compareData.v2?.state} title={`Version ${compareV2}`} />
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* ROLLBACK & RESTORE CONFIRMATION MODAL */}
+          {rollbackTarget && (
+            <div className="modal-backdrop" onClick={() => !rollbackLoading && setRollbackTarget(null)}>
+              <div className="modal-card" onClick={(e) => e.stopPropagation()} style={{ maxWidth: "480px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <h3 style={{ fontSize: "16px", fontWeight: 800 }}>
+                    {rollbackTarget.isDeleted ? "♻️ Resurrect Deleted Document" : "⏪ Rollback Document Version"}
+                  </h3>
+                  <button className="btn btn-secondary" onClick={() => setRollbackTarget(null)} disabled={rollbackLoading}>✕</button>
+                </div>
+
+                <div style={{ margin: "14px 0", fontSize: "13px", lineHeight: "1.6", color: "var(--text-secondary)" }}>
+                  <p>
+                    Target Document: <strong>{rollbackTarget.title}</strong>
+                  </p>
+                  <p style={{ marginTop: "6px" }}>
+                    Select version to restore:
+                  </p>
+                  <select
+                    className="select-field"
+                    style={{ width: "100%", marginTop: "6px", fontWeight: 700 }}
+                    value={rollbackTarget.version}
+                    onChange={(e) => setRollbackTarget({ ...rollbackTarget, version: parseInt(e.target.value, 10) })}
+                  >
+                    {Array.from({ length: Math.max(1, rollbackTarget.maxVersion || 1) }, (_, i) => i + 1).map((v) => (
+                      <option key={v} value={v}>Restore to Version {v}</option>
+                    ))}
+                  </select>
+
+                  <div style={{ background: "var(--bg-surface-elevated)", padding: "10px", borderRadius: "8px", border: "1px solid var(--border-subtle)", marginTop: "12px", fontSize: "12px" }}>
+                    {rollbackTarget.isDeleted ? (
+                      <span style={{ color: "var(--success)" }}>
+                        ✓ This will resurrect the deleted document back into active MongoDB collection with its original _id.
+                      </span>
+                    ) : (
+                      <span style={{ color: "var(--warning)" }}>
+                        ⚠ This will overwrite active document fields with the reconstructed state at Version {rollbackTarget.version}.
+                      </span>
+                    )}
+                    <div style={{ marginTop: "4px", color: "var(--text-muted)" }}>
+                      A new rollback commit will be recorded preserving the full audit trail.
+                    </div>
+                  </div>
+                </div>
+
+                <div style={{ display: "flex", justifyContent: "flex-end", gap: "8px" }}>
+                  <button className="btn btn-secondary" onClick={() => setRollbackTarget(null)} disabled={rollbackLoading}>
+                    Cancel
+                  </button>
+                  <button
+                    className="btn btn-primary"
+                    onClick={() => executeRollback(rollbackTarget.modelName, rollbackTarget.docId, rollbackTarget.version)}
+                    disabled={rollbackLoading}
+                  >
+                    {rollbackLoading ? "Restoring..." : "Confirm Rollback"}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+  </script>
+</body>
+</html>

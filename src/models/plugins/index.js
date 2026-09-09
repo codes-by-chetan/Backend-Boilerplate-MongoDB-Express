@@ -2,5 +2,8 @@
 import paginate from "./paginate.plugin.js";
 import privatePlugin from "./private.plugin.js";
 import softDelete from "./softDelete.plugin.js";
+import versioning from "./versioning.plugin.js";
 
-export default { paginate, privatePlugin, softDelete };
+export { paginate, privatePlugin, softDelete, versioning };
+
+export default { paginate, privatePlugin, softDelete, versioning };

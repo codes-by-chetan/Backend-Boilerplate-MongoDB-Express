@@ -45,7 +45,16 @@ const loginWithEmailAndPassword = async (req) => {
     }
 
     const token = await user.generateAccessToken(req);
-    return token;
+    return {
+        ...token,
+        accessToken: token.token,
+        user: {
+            id: user._id,
+            email: user.email,
+            userName: user.userName,
+            role: user.role,
+        },
+    };
 };
 
 /**

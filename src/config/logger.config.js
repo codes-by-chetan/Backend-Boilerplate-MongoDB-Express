@@ -4,17 +4,18 @@ import httpStatus from "http-status";
 import fs from "fs";
 import path from "path";
 
+const logsDirectory = path.join(process.cwd(), "logs");
+if (!fs.existsSync(logsDirectory)) {
+    fs.mkdirSync(logsDirectory, { recursive: true });
+}
+
 // Function to get log file path based on current date
 const getLogFilePath = () => {
     const date = new Date().toISOString().split("T")[0]; // YYYY-MM-DD format
-    return path.join(process.cwd(), `logs/logs-${date}.html`);
+    return path.join(logsDirectory, `logs-${date}.html`);
 };
 
-// Global variable to hold the current log stream and date
-let currentDate = new Date().toISOString().split("T")[0];
-let logStream = fs.createWriteStream(getLogFilePath(), { flags: "a" });
-
-// Function to initialize or update log file with HTML structure
+// Function to initialize log file with HTML structure if not already created
 const initializeLogFile = (filePath) => {
     if (!fs.existsSync(filePath)) {
         const date = new Date().toISOString().split("T")[0];
@@ -26,55 +27,50 @@ const initializeLogFile = (filePath) => {
     <meta charset="UTF-8">
     <title>Application Logs - ${date}</title>
     <style>
-        body { font-family: monospace; background: #1a1a1a; color: #fff; padding: 20px; }
-        .timestamp { color: #888; font-weight: bold; }
-        .info { color: #0ca8d8; }
-        .warn { color: #ff0; }
-        .error { color: #f00; }
-        .debug { color: #f0f; }
-        .success { color: #0f0; }
+        body { font-family: monospace; background: #090d16; color: #f8fafc; padding: 20px; line-height: 1.6; }
+        pre { white-space: pre-wrap; word-break: break-word; font-family: inherit; }
+        .log-line { display: block; margin: 2px 0; }
+        .timestamp { color: #94a3b8; font-weight: bold; }
+        .info { color: #38bdf8; font-weight: bold; }
+        .warn { color: #f59e0b; font-weight: bold; }
+        .error { color: #ef4444; font-weight: bold; }
+        .debug { color: #c084fc; font-weight: bold; }
+        .success { color: #10b981; font-weight: bold; }
         .method { font-weight: bold; }
-        .url { background: #555; padding: 2px 5px; }
-        .status-red { color: #f00; font-weight: bold; }
-        .status-green { color: #0f0; font-weight: bold; }
-        .status-message { color: #ff0; }
+        .url { background: #1e293b; padding: 2px 6px; border-radius: 4px; }
+        .status-red { color: #ef4444; font-weight: bold; }
+        .status-green { color: #10b981; font-weight: bold; }
+        .status-message { color: #f59e0b; }
         .content-length { font-weight: bold; }
         .response-time { font-weight: bold; }
     </style>
 </head>
-<body><pre>`,
+<body><pre>\n`,
             "utf8"
         );
     }
 };
 
-// Initialize the first log file
+// Initialize the log file for today
 initializeLogFile(getLogFilePath());
 
-// Function to update log stream if date changes
-const updateLogStream = () => {
-    const newDate = new Date().toISOString().split("T")[0];
-    if (newDate !== currentDate) {
-        logStream.write("</pre></body></html>"); // Close the old file
-        logStream.end();
-        currentDate = newDate;
-        const newFilePath = getLogFilePath();
-        initializeLogFile(newFilePath);
-        logStream = fs.createWriteStream(newFilePath, { flags: "a" });
+/**
+ * Safely append an HTML log line to today's log file
+ */
+const writeHtmlLog = (htmlEntry) => {
+    try {
+        const filePath = getLogFilePath();
+        initializeLogFile(filePath);
+        fs.appendFileSync(filePath, htmlEntry, "utf8");
+    } catch (error) {
+        console.error("Failed to write to log file:", error);
     }
 };
 
 // Custom Morgan format for HTTP request logging
 const customMorganFormat = (tokens, req, res) => {
-    updateLogStream(); // Check and update stream before logging
-
-    const timestamp = chalk.bold(
-        chalk.gray(
-            new Date().toLocaleDateString() +
-                " " +
-                new Date().toLocaleTimeString()
-        )
-    );
+    const timestampStr = new Date().toLocaleDateString() + " " + new Date().toLocaleTimeString();
+    const timestamp = chalk.bold(chalk.gray(timestampStr));
     const status = tokens.status(req, res);
     const statusColor = status >= 400 ? chalk.red : chalk.green;
     const statusMessage = httpStatus[status] || "Unknown Status";
@@ -95,12 +91,10 @@ const customMorganFormat = (tokens, req, res) => {
         "ms",
     ].join(" ");
 
-    // HTML log with styled classes
-    const htmlLog = `<span class="timestamp">${
-        new Date().toLocaleDateString() + " " + new Date().toLocaleTimeString()
-    }</span> <span class="method ${status >= 400 ? "status-red" : "status-green"}">[SERVER] [${tokens.method(req, res)}]</span> ===>> <span class="url">${tokens.url(req, res)}</span>  <span class="${status >= 400 ? "status-red" : "status-green"}">${status}</span> <span class="status-message">[${statusMessage}]</span> <span class="content-length">${tokens.res(req, res, "content-length") || "-"}</span> - <span class="response-time">${tokens["response-time"](req, res)}</span> ms\n`;
+    // HTML log with block-level structure and styled classes
+    const htmlLog = `<div class="log-line"><span class="timestamp">${timestampStr}</span> <span class="method ${status >= 400 ? "status-red" : "status-green"}">[SERVER] [${tokens.method(req, res)}]</span> ===>> <span class="url">${tokens.url(req, res)}</span>  <span class="${status >= 400 ? "status-red" : "status-green"}">${status}</span> <span class="status-message">[${statusMessage}]</span> <span class="content-length">${tokens.res(req, res, "content-length") || "-"}</span> - <span class="response-time">${tokens["response-time"](req, res)}</span> ms</div>\n`;
 
-    logStream.write(htmlLog);
+    writeHtmlLog(htmlLog);
 
     return consoleLog;
 };
@@ -112,13 +106,10 @@ const requestLogger = morgan(customMorganFormat);
  * Logs messages to both console and HTML file with specified log levels.
  * @param {"info"|"warn"|"error"|"debug"|"success"} type - The log level.
  * @param {string|object} message - The message or data to log.
- * @param {"SERVER"|"SOCKET"} from - The message or data to log.
+ * @param {"SERVER"|"SOCKET"} from - The origin of the log.
  */
 const logMessage = (type, message, from = "SERVER") => {
-    updateLogStream(); // Check and update stream before logging
-
-    const timestamp =
-        new Date().toLocaleDateString() + " " + new Date().toLocaleTimeString();
+    const timestampStr = new Date().toLocaleDateString() + " " + new Date().toLocaleTimeString();
 
     const logTypes = {
         info: chalk.bold(chalk.blue(`[${from}] ` + "[INFO]")),
@@ -128,26 +119,16 @@ const logMessage = (type, message, from = "SERVER") => {
         success: chalk.bold(chalk.green(`[${from}] ` + "[SUCCESS]")),
     };
 
-    const logType =
-        logTypes[type] || chalk.bold(chalk.gray(`[${type.toUpperCase()}]`));
-    const formattedMessage =
-        typeof message === "object"
-            ? JSON.stringify(message, null, 2)
-            : message;
+    const logType = logTypes[type] || chalk.bold(chalk.gray(`[${type.toUpperCase()}]`));
+    const formattedMessage = typeof message === "object" ? JSON.stringify(message, null, 2) : message;
 
     // Log to console with colors
-    console.log(`${chalk.gray(timestamp)} ${logType} ${formattedMessage}`);
+    console.log(`${chalk.gray(timestampStr)} ${logType} ${formattedMessage}`);
 
-    // Log to HTML file with styled classes
-    const htmlLog = `<span class="timestamp">${timestamp}</span> <span class="${type}">[${from.toString()?.toUpperCase()}] [${type?.toUpperCase()}]</span> ${formattedMessage}\n`;
-    logStream.write(htmlLog);
+    // Log to HTML file with block-level structure
+    const htmlLog = `<div class="log-line"><span class="timestamp">${timestampStr}</span> <span class="${type}">[${from.toString()?.toUpperCase()}] [${type?.toUpperCase()}]</span> ${formattedMessage}</div>\n`;
+    writeHtmlLog(htmlLog);
 };
-
-// Ensure proper closure of HTML file on process exit
-process.on("exit", () => {
-    logStream.write("</pre></body></html>");
-    logStream.end();
-});
 
 // Handle uncaught exceptions and log them
 process.on("uncaughtException", (err) => {
@@ -163,4 +144,3 @@ process.on("unhandledRejection", (reason) => {
 const logger = { logMessage, requestLogger };
 
 export default logger;
-

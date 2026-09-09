@@ -13,7 +13,7 @@ const envVarSchema = joi
             .description("Node environment type"),
         PORT: joi.number().default(3000).description("Server port"),
         MONGODB_URI: joi.string().description("MongoDB connection string"),
-        DB_NAME: joi.string().default("license_manager_pos").description("Database name"),
+        DB_NAME: joi.string().default("backend_boilerplate").description("Database name"),
         CORS_ORIGIN: joi.string().default("*").description("CORS origin url"),
         ACCESS_TOKEN_SECRET_KEY: joi
             .string()
@@ -42,6 +42,10 @@ const envVarSchema = joi
         META_CLIENT_ID: joi.string().description("Meta / Facebook app id"),
         META_CLIENT_SECRET: joi.string().description("Meta / Facebook app secret"),
         SELF_HOST_URL: joi.string().description("Server self-host URL"),
+        BOOTSTRAP_ADMIN: joi.boolean().default(true).description("Enable bootstrap admin seeding"),
+        ADMIN_NAME: joi.string().default("Admin").description("Bootstrap admin name"),
+        ADMIN_EMAIL: joi.string().email().default("admin@example.com").description("Bootstrap admin email"),
+        ADMIN_PASSWORD: joi.string().default("admin12345").description("Bootstrap admin password"),
     })
     .unknown();
 
@@ -92,6 +96,12 @@ const config = {
         host: {
             url: envVars.SELF_HOST_URL,
         },
+    },
+    admin: {
+        bootstrapEnabled: envVars.BOOTSTRAP_ADMIN,
+        name: envVars.ADMIN_NAME,
+        email: envVars.ADMIN_EMAIL,
+        password: envVars.ADMIN_PASSWORD,
     },
 };
 

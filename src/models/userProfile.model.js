@@ -101,17 +101,12 @@ userProfileSchema.virtual("isComplete").get(function () {
 });
 
 // Plugins
-userProfileSchema.plugin(plugins.softDelete);
+userProfileSchema.plugin(plugins.versioning);
 userProfileSchema.plugin(plugins.paginate);
 userProfileSchema.plugin(plugins.privatePlugin);
 
 // Indexes for performance
 userProfileSchema.index({ displayName: 1 }, { sparse: true });
-
-// Pre-save hook for logging
-userProfileSchema.pre("save", async function () {
-    return middlewares.dbLogger("UserProfile").call(this);
-});
 
 // Utility method to create or update profile
 userProfileSchema.statics.upsertProfile = async function (

@@ -2,33 +2,67 @@ import mongoose from "mongoose";
 
 const dbLogsSchema = new mongoose.Schema(
   {
-    previousValue: { type: Object },
-    newValue: { type: Object },
-    status: {
+    affectedCollection: {
       type: String,
-      enum: ["success", "failed"],
       required: true,
+      index: true,
     },
-    transactionType: {
-      type: String,
-      enum: ["insert", "update", "delete"],
-      required: true,
-    },
-    transactionDetails: { type: String },
-    affectedCollection: { type: String, required: true },
     affectedDocumentId: {
       type: mongoose.Schema.Types.ObjectId,
       required: true,
+      index: true,
     },
-    user: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
-    ipAddress: { type: String },
-    origin: { type: String },
+    version: {
+      type: Number,
+      required: true,
+      default: 1,
+      index: true,
+    },
+    transactionType: {
+      type: String,
+      enum: ["insert", "update", "delete", "rollback", "restore"],
+      required: true,
+      index: true,
+    },
+    status: {
+      type: String,
+      enum: ["success", "failed"],
+      default: "success",
+    },
+    diff: {
+      type: Object,
+      default: {},
+    },
+    summary: {
+      type: String,
+      default: "",
+    },
+    transactionDetails: {
+      type: String,
+      default: "",
+    },
+    user: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+    },
+    ipAddress: {
+      type: String,
+      default: null,
+    },
+    origin: {
+      type: String,
+      default: null,
+    },
   },
   {
     timestamps: true,
   }
 );
 
+// High-speed compound indexes for version history and collection timelines
+dbLogsSchema.index({ affectedCollection: 1, affectedDocumentId: 1, version: 1 });
+dbLogsSchema.index({ affectedCollection: 1, createdAt: -1 });
 
 const DbLogs = mongoose.model("DbLogs", dbLogsSchema);
 

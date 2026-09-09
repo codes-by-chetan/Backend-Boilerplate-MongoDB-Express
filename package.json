@@ -1,5 +1,5 @@
 {
-  "name": "license-manager-pos",
+  "name": "backend-boilerplate",
   "version": "1.0.0",
   "description": "Express.js and MongoDB backend boilerplate with JWT authentication, multi-device sessions, dual logging, and audit trail",
   "license": "ISC",
@@ -8,6 +8,9 @@
   "main": "src/index.js",
   "scripts": {
     "dev": "nodemon src/index.js",
+    "dev:admin": "pnpm --filter @boilerplate/admin dev",
+    "build:admin": "pnpm --filter @boilerplate/admin build",
+    "build:frontend": "pnpm --filter \"@boilerplate/*\" build",
     "start": "node src/index.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },

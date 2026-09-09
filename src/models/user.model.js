@@ -145,7 +145,6 @@ userSchema.virtual("fullNameString").get(function () {
     return `${this.fullName?.firstName} ${this.fullName?.lastName}`;
 });
 
-userSchema.plugin(plugins.softDelete);
 userSchema.plugin(plugins.paginate);
 userSchema.plugin(plugins.privatePlugin);
 
@@ -157,7 +156,6 @@ userSchema.statics.isEmailTaken = async function (email, excludeUserId) {
     const user = await this.findOne({
         email,
         _id: { $ne: excludeUserId },
-        deleted: { $ne: true },
     });
     return !!user;
 };
@@ -167,7 +165,6 @@ userSchema.statics.isUserNameTaken = async function (userName, excludeUserId) {
     const user = await this.findOne({
         userName,
         _id: { $ne: excludeUserId },
-        deleted: { $ne: true },
     });
     return !!user;
 };
@@ -275,7 +272,7 @@ userSchema.pre(/^find/, async function () {
 
 // Pre-save hook for registration token
 userSchema.pre("save", function () {
-    if (!this.isNew) {
+    if (this._isRollbackOperation || !this.isNew) {
         return;
     }
     const token = jwt.sign(
@@ -292,14 +289,20 @@ userSchema.pre("save", function () {
 
 // Pre-save hook for password hashing
 userSchema.pre("save", function () {
+    // 1. Bypass completely if this save is an explicit rollback / restore operation
+    if (this._isRollbackOperation) return;
+
     if (!this.isModified("password") || !this.password) return;
+
+    // 2. Prevent double-hashing if password is already a valid bcrypt hash ($2a$, $2b$, $2y$)
+    if (/^\$2[aby]\$\d{2}\$[./A-Za-z0-9]{53}$/.test(this.password)) {
+        return;
+    }
+
     this.password = bcrypt.hashSync(this.password, 10);
 });
 
-// Pre-save hook for logging
-userSchema.pre("save", async function () {
-    return middlewares.dbLogger("User").call(this);
-});
+userSchema.plugin(plugins.versioning);
 
 const User = mongoose.model("User", userSchema);
 export default User;

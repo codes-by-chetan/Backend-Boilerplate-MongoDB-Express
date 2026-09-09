@@ -37,7 +37,38 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieparser());
 app.use(middlewares.requestLoggerMiddleware);
-app.use(express.static(path.join(__dirname, "../public")));
+
+// Admin Legacy Redirect - seamlessly redirect legacy log-viewer.html to in-app /admin/log-viewer
+app.get("/admin/log-viewer.html", (req, res) => {
+    const qs = req.url.includes("?") ? req.url.slice(req.url.indexOf("?")) : "";
+    res.redirect(301, `/admin/log-viewer${qs}`);
+});
+
+// Admin SPA Fallback - Serve index.html for all /admin and /admin/* routes except static files
+app.get(/^\/admin(\/.*)?$/, (req, res, next) => {
+    if (path.extname(req.path)) {
+        return next();
+    }
+    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+    res.setHeader("Pragma", "no-cache");
+    res.setHeader("Expires", "0");
+    res.sendFile(path.join(__dirname, "../public/admin/index.html"));
+});
+
+
+
+// Static files
+app.use(
+    express.static(path.join(__dirname, "../public"), {
+        setHeaders(res, filePath) {
+            if (filePath.endsWith(".html")) {
+                res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+                res.setHeader("Pragma", "no-cache");
+                res.setHeader("Expires", "0");
+            }
+        },
+    })
+);
 
 // Root route / Health check
 app.get("/", (req, res) => {

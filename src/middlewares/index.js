@@ -1,4 +1,4 @@
-import authMiddleware from "./auth.middleware.js";
+import authMiddleware, { authorize } from "./auth.middleware.js";
 import dbLogger from "./dbLogger.middleware.js";
 import errorHandler from "./errorHandler.middleware.js";
 import { upload } from "./multer.middleware.js";
@@ -11,9 +11,21 @@ const middlewares = {
     errorHandler,
     requestLoggerMiddleware,
     authMiddleware,
+    authorize,
     validate,
     upload,
-    userMiddleware
+    userMiddleware,
+};
+
+export {
+    authMiddleware,
+    authorize,
+    dbLogger,
+    errorHandler,
+    requestLoggerMiddleware,
+    userMiddleware,
+    validate,
+    upload,
 };
 
 export default middlewares;

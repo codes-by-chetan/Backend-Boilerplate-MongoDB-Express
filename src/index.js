@@ -2,6 +2,7 @@ import app from "./app.js";
 import config from "./config/env.config.js";
 import logger from "./config/logger.config.js";
 import connectDB from "./db/index.js";
+import ensureAdminUser from "./db/adminBootstrap.js";
 import getHostIpAddress from "./utils/hostIP.js";
 import { Server } from "socket.io";
 import { initializeSocket } from "./sockets/socket.js";
@@ -11,7 +12,8 @@ let io;
 let transporter;
 
 connectDB()
-    .then(() => {
+    .then(async () => {
+        await ensureAdminUser();
         const host = getHostIpAddress();
         const port = config.port || 5000;
         const serverUrl = `http://${host}:${port}`;
