@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from "react";
-import { Routes, Route, Navigate, Link, useLocation } from "react-router-dom";
+import { Routes, Route, Navigate } from "react-router-dom";
 import { Header } from "./components/common/Header";
 import { QuickStats } from "./components/common/QuickStats";
+import { NavigationTabs } from "./components/common/NavigationTabs";
+import { AuthRequiredCard } from "./components/common/AuthRequiredCard";
 import { LoginModal } from "./components/common/LoginModal";
 import { StreamView } from "./components/views/StreamView";
 import { SystemView } from "./components/views/SystemView";
@@ -23,22 +25,9 @@ import {
   getCurrentUser,
   api,
 } from "./api/client";
-import {
-  Radio,
-  Cpu,
-  FileText,
-  Database,
-  ShieldCheck,
-  GitBranch,
-  Users,
-  Lock,
-  LogIn,
-} from "lucide-react";
-import { Button } from "./components/ui/button";
 
 export function App() {
   const { theme, toggleTheme } = useTheme();
-  const location = useLocation();
   const [token, setToken] = useState(() => getToken());
   const [currentUser, setCurrentUser] = useState(() => getCurrentUser());
   const [isLoginOpen, setIsLoginOpen] = useState(false);
@@ -128,19 +117,6 @@ export function App() {
     setAuthBanner("Logged out successfully.");
   };
 
-  const tabs = [
-    { id: "stream", label: "Real-Time Stream", path: "/stream", count: liveStream.length, icon: Radio },
-    { id: "system", label: "System Telemetry", path: "/system", icon: Cpu, requiresAuth: true },
-    { id: "files", label: "Log Files", path: "/files", icon: FileText, requiresAuth: true },
-    { id: "db-requests", label: "HTTP Requests", path: "/db-requests", icon: Database, requiresAuth: true },
-    { id: "db-audits", label: "Audit Trails", path: "/db-audits", icon: ShieldCheck, requiresAuth: true },
-    { id: "versions", label: "Time Machine", path: "/versions", icon: GitBranch, requiresAuth: true },
-    { id: "users", label: "Users", path: "/users", icon: Users, requiresAuth: true },
-  ];
-
-  const currentPath = location.pathname;
-  const isStreamActive = currentPath === "/" || currentPath === "/stream" || currentPath === "";
-
   return (
     <div className="min-h-screen bg-background text-foreground transition-colors">
       <Header
@@ -175,40 +151,10 @@ export function App() {
         />
 
         {/* Tab Navigation Bar with Client-Side Routing */}
-        <div className="flex items-center gap-1.5 overflow-x-auto border-b border-border/80 pb-px scrollbar-none">
-          {tabs.map((tab) => {
-            const Icon = tab.icon;
-            const isActive =
-              tab.id === "stream"
-                ? isStreamActive
-                : currentPath.startsWith(tab.path) ||
-                  (tab.id === "files" && currentPath.startsWith("/log-viewer"));
-            return (
-              <Link
-                key={tab.id}
-                to={tab.path}
-                className={`flex items-center gap-2 px-3.5 py-2.5 rounded-t-lg text-xs font-semibold whitespace-nowrap transition-all border-b-2 select-none ${
-                  isActive
-                    ? "border-primary text-primary bg-card/60 shadow-xs"
-                    : "border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/40"
-                }`}
-              >
-                <Icon className={`h-3.5 w-3.5 ${isActive ? "text-primary" : "text-muted-foreground"}`} />
-                <span>{tab.label}</span>
-                {tab.count !== undefined && (
-                  <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${
-                    isActive ? "bg-primary/20 text-primary" : "bg-muted text-muted-foreground"
-                  }`}>
-                    {tab.count}
-                  </span>
-                )}
-                {tab.requiresAuth && !token && (
-                  <Lock className="h-3 w-3 text-muted-foreground opacity-60 ml-0.5" />
-                )}
-              </Link>
-            );
-          })}
-        </div>
+        <NavigationTabs
+          token={token}
+          liveStreamCount={liveStream.length}
+        />
 
         {/* Tab View Contents via Route Matching */}
         <div className="pt-1">
@@ -318,26 +264,6 @@ export function App() {
         onClose={() => setIsLoginOpen(false)}
         onLoginSuccess={handleLoginSuccess}
       />
-    </div>
-  );
-}
-
-function AuthRequiredCard({ onOpenLogin, title }) {
-  return (
-    <div className="p-12 text-center rounded-xl border border-border bg-card space-y-3 shadow-sm max-w-lg mx-auto my-6">
-      <div className="h-10 w-10 rounded-full bg-primary/10 border border-primary/20 text-primary flex items-center justify-center mx-auto">
-        <Lock className="h-5 w-5" />
-      </div>
-      <h3 className="text-sm font-bold text-foreground">Admin Session Required</h3>
-      <p className="text-xs text-muted-foreground">
-        {title} requires an active administrator token to inspect.
-      </p>
-      <div className="pt-2">
-        <Button onClick={onOpenLogin} size="sm" className="gap-1.5">
-          <LogIn className="h-3.5 w-3.5" />
-          <span>Sign In with Admin Credentials</span>
-        </Button>
-      </div>
     </div>
   );
 }
