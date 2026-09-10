@@ -4,6 +4,7 @@ import {
     reconstructDocumentAtVersion,
     sanitizeForDiff,
     normalizeValue,
+    isSensitiveKey,
 } from "../../utils/diff.util.js";
 
 const toPlainDoc = (doc) => {
@@ -43,7 +44,7 @@ const versioningPlugin = (schema, options = {}) => {
     // 3. Hook pre("save"): Track inserts and deep delta updates
     schema.pre("save", async function () {
         // If this save is part of an explicit rollback/resurrect operation, do not emit duplicate commits
-        if (this._isRollbackOperation) {
+        if (this._isRollbackOperation || this.$locals?.isRollback) {
             return;
         }
 
@@ -245,21 +246,44 @@ const versioningPlugin = (schema, options = {}) => {
         const latestVersion = history[history.length - 1]?.version || 1;
         const newVersion = latestVersion + 1;
 
+        const userExcluded = options.excludeFieldsOnRollback || [];
+        const isExcludedOnRollback = (key) => {
+            if (userExcluded.includes(key)) return true;
+            if (options.includeSensitiveOnRollback !== true && isSensitiveKey(key)) return true;
+            return false;
+        };
+
         if (!activeDoc) {
             // Document was deleted! Resurrect it with its original _id
             restoredData._id = documentId;
+
+            // Strip placeholder "[REDACTED]" values to avoid corrupting resurrected documents
+            for (const [key, value] of Object.entries(restoredData)) {
+                if (value === "[REDACTED]") {
+                    delete restoredData[key];
+                }
+            }
+
             activeDoc = new this(restoredData);
             activeDoc._isRollbackOperation = true;
+            if (activeDoc.$locals) activeDoc.$locals.isRollback = true;
             activeDoc._reqContext = userContext;
             await activeDoc.save();
         } else {
             // Document exists! Overwrite its fields with the restored state
             for (const [key, value] of Object.entries(restoredData)) {
                 if (key !== "_id") {
+                    // 1. NEVER overwrite an active document's value with "[REDACTED]"
+                    if (value === "[REDACTED]") continue;
+
+                    // 2. Do not overwrite sensitive or explicitly excluded fields on active docs
+                    if (isExcludedOnRollback(key)) continue;
+
                     activeDoc.set(key, value);
                 }
             }
             activeDoc._isRollbackOperation = true;
+            if (activeDoc.$locals) activeDoc.$locals.isRollback = true;
             activeDoc._reqContext = userContext;
             await activeDoc.save();
         }

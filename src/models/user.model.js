@@ -7,12 +7,12 @@ import constants from "../constants/index.js";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import config from "../config/env.config.js";
-import middlewares from "../middlewares/index.js";
 import moment from "moment";
 import reusableSchemas from "./reusableSchemas/index.js";
 import { v4 as uuidv4 } from "uuid";
 import { UAParser } from "ua-parser-js";
 import getIpDetails from "../utils/getIpDetails.js";
+import { isBcryptHash } from "../utils/diff.util.js";
 
 const fullNameSchema = new mongoose.Schema({
     firstName: {
@@ -272,7 +272,7 @@ userSchema.pre(/^find/, async function () {
 
 // Pre-save hook for registration token
 userSchema.pre("save", function () {
-    if (this._isRollbackOperation || !this.isNew) {
+    if (this._isRollbackOperation || this.$locals?.isRollback || !this.isNew) {
         return;
     }
     const token = jwt.sign(
@@ -290,19 +290,21 @@ userSchema.pre("save", function () {
 // Pre-save hook for password hashing
 userSchema.pre("save", function () {
     // 1. Bypass completely if this save is an explicit rollback / restore operation
-    if (this._isRollbackOperation) return;
+    if (this._isRollbackOperation || this.$locals?.isRollback) return;
 
     if (!this.isModified("password") || !this.password) return;
 
     // 2. Prevent double-hashing if password is already a valid bcrypt hash ($2a$, $2b$, $2y$)
-    if (/^\$2[aby]\$\d{2}\$[./A-Za-z0-9]{53}$/.test(this.password)) {
+    if (isBcryptHash(this.password)) {
         return;
     }
 
     this.password = bcrypt.hashSync(this.password, 10);
 });
 
-userSchema.plugin(plugins.versioning);
+userSchema.plugin(plugins.versioning, {
+    excludeFieldsOnRollback: ["password", "registrationToken"],
+});
 
 const User = mongoose.model("User", userSchema);
 export default User;

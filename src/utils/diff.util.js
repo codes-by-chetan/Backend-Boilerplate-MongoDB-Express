@@ -37,6 +37,18 @@ export const isSensitiveKey = (key) => {
 };
 
 /**
+ * Modular Crypt Format (MCF) regex for standard bcrypt hashes ($2a$, $2b$, $2y$).
+ */
+export const BCRYPT_HASH_REGEX = /^\$2[aby]\$\d{2}\$[./A-Za-z0-9]{53}$/;
+
+/**
+ * Check if a string is already a valid bcrypt hash.
+ */
+export const isBcryptHash = (val) => {
+    return typeof val === "string" && BCRYPT_HASH_REGEX.test(val);
+};
+
+/**
  * Check if a value is a plain JavaScript object (not Date, ObjectId, Decimal128, Buffer, etc.)
  */
 export const isPlainObject = (val) => {
@@ -391,4 +403,7 @@ export default {
     normalizeValue,
     sanitizeForDiff,
     isDeepEqual,
+    isSensitiveKey,
+    isBcryptHash,
+    BCRYPT_HASH_REGEX,
 };
