@@ -20,12 +20,16 @@ export function LoginModal({ open, onClose, onLoginSuccess }) {
 
     try {
       const data = await api.login(email, password);
-      const token = data?.data?.accessToken || data?.data?.token;
-      if (!token) throw new Error("No token returned from server");
+      const accessToken = data?.data?.accessToken || data?.data?.token;
+      const refreshToken = data?.data?.refreshToken;
+      const user = data?.data?.user;
+      if (user && user.role !== "admin") {
+        throw new Error("Access denied: Only accounts with the Admin role are authorized to access this portal.");
+      }
 
-      setSuccessMsg("Logged in successfully!");
+      setSuccessMsg("Administrator authenticated successfully!");
       setTimeout(() => {
-        onLoginSuccess(token);
+        onLoginSuccess({ accessToken, refreshToken, user });
         onClose();
         setSuccessMsg("");
       }, 500);
@@ -41,10 +45,10 @@ export function LoginModal({ open, onClose, onLoginSuccess }) {
       <DialogHeader>
         <DialogTitle className="flex items-center gap-2">
           <Lock className="h-4 w-4 text-primary" />
-          <span>Admin Authentication</span>
+          <span>Admin Portal Authentication</span>
         </DialogTitle>
         <DialogDescription>
-          Sign in with administrator credentials to access real-time telemetry, database audit logs, and version time-machine.
+          Sign in with administrator credentials. Access to real-time telemetry, audit logs, and the version time-machine is strictly restricted to the Admin role.
         </DialogDescription>
       </DialogHeader>
 

@@ -22,6 +22,13 @@ const requestLogSchema = new Schema(
     }
 );
 
+// Indexes for fast sorted queries and pagination without memory sort errors
+requestLogSchema.index({ createdAt: -1 });
+requestLogSchema.index({ requestStatus: 1, createdAt: -1 });
+requestLogSchema.index({ requestMethod: 1, createdAt: -1 });
+requestLogSchema.index({ responseStatus: 1, createdAt: -1 });
+requestLogSchema.index({ requestUrl: 1, createdAt: -1 });
+
 // requestLogSchema.pre("save", dbLogger("RequestLog"));
 
 const RequestLog = mongoose.model("RequestLog", requestLogSchema);

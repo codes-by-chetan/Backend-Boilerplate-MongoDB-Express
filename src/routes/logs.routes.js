@@ -20,6 +20,8 @@ router.get("/system-stats", controllers.logsController.getSystemStats);
 // MongoDB persistent logs
 router.get("/db-request-logs", controllers.logsController.getDbRequestLogs);
 router.get("/db-audit-logs", controllers.logsController.getDbAuditLogs);
+router.post("/decrypt-field", controllers.logsController.decryptField);
+router.get("/decryption-audits", controllers.logsController.getDecryptionAuditLogs);
 
 // Mongoose Git-like Versioning & Document Lifecycle Endpoints
 router.get("/models", controllers.logsController.getAvailableModels);

@@ -11,12 +11,13 @@ import axios from "axios";
 const googleClient = new OAuth2Client(config.google_client_id);
 
 /**
- * Authenticates a user using email/username and password.
+ * Logs in a user using email or username and password, with optional role enforcement.
  *
  * @param {Object} req - The express request object containing credentials in req.body.
+ * @param {Object} [options] - Additional login constraints (e.g. allowedRoles).
  * @returns {Promise<Object>} - Resolves to the access token and session metadata.
  */
-const loginWithEmailAndPassword = async (req) => {
+const loginWithEmailAndPassword = async (req, options = {}) => {
     const credentials = req.body;
 
     if (!credentials.userName && !credentials.email) {
@@ -44,14 +45,23 @@ const loginWithEmailAndPassword = async (req) => {
         throw new ApiError(httpStatus.UNAUTHORIZED, "Incorrect password.");
     }
 
-    const token = await user.generateAccessToken(req);
+    if (options.allowedRoles && options.allowedRoles.length > 0) {
+        if (!options.allowedRoles.includes(user.role)) {
+            throw new ApiError(
+                httpStatus.FORBIDDEN,
+                "Access denied. Only users with the Admin role are authorized to log in to this portal."
+            );
+        }
+    }
+
+    const tokens = await user.generateAuthTokens(req);
     return {
-        ...token,
-        accessToken: token.token,
+        ...tokens,
         user: {
             id: user._id,
             email: user.email,
             userName: user.userName,
+            fullName: user.fullName,
             role: user.role,
         },
     };
@@ -168,7 +178,7 @@ const verifySocialToken = async (provider, token, req) => {
         throw new ApiError(httpStatus.UNAUTHORIZED, "User account is inactive.");
     }
 
-    const authTokens = await user.generateAccessToken(req);
+    const authTokens = await user.generateAuthTokens(req);
     const chosenFields = {
         fullName: user.fullName,
         email: user.email,
@@ -216,23 +226,57 @@ const changeUserPassword = async (oldPassword, newPassword, userId) => {
 };
 
 /**
+ * Refreshes auth tokens using a valid refresh token.
+ * Implements token rotation by revoking the old session and generating a new token pair.
+ *
+ * @param {string} refreshToken - The refresh token provided in cookie or body.
+ * @param {Object} req - The express request object.
+ * @returns {Promise<Object>} - Resolves to the rotated access and refresh tokens.
+ */
+const refreshAuthTokens = async (refreshToken, req) => {
+    if (!refreshToken) {
+        throw new ApiError(httpStatus.UNAUTHORIZED, "Refresh token is required.");
+    }
+
+    // 1. Verify token signature and validate active session
+    const { user, decoded } = await models.User.verifyRefreshToken(refreshToken);
+
+    // 2. Revoke the old session (atomic rotation)
+    await models.User.revokeSession(user._id, decoded.jti);
+
+    // 3. Generate new token pair and record new active session
+    const newTokens = await user.generateAuthTokens(req);
+
+    return {
+        ...newTokens,
+        user: {
+            id: user._id,
+            email: user.email,
+            userName: user.userName,
+            fullName: user.fullName,
+            role: user.role,
+        },
+    };
+};
+
+/**
  * Logs out a user by revoking the active session associated with the JWT.
  *
  * @param {string} userId - The user ID.
- * @param {string} token - The access token to revoke.
+ * @param {string} token - The access token or refresh token to revoke.
  */
 const logout = async (userId, token) => {
+    if (!token) return;
     try {
-        const decoded = jwt.verify(token, config.jwt.secret);
-        const tokenId = decoded.jti;
+        let tokenId = token;
+        try {
+            const decoded = jwt.decode(token);
+            if (decoded?.jti) {
+                tokenId = decoded.jti;
+            }
+        } catch (_) {}
 
-        const result = await models.User.revokeSession(userId, tokenId);
-        if (result.modifiedCount === 0) {
-            throw new ApiError(
-                httpStatus.BAD_REQUEST,
-                "Session not found or already revoked."
-            );
-        }
+        await models.User.revokeSession(userId, tokenId);
     } catch (error) {
         if (error instanceof jwt.JsonWebTokenError) {
             throw new ApiError(httpStatus.UNAUTHORIZED, "Invalid token.");
@@ -241,12 +285,23 @@ const logout = async (userId, token) => {
     }
 };
 
+/**
+ * Logs out user from all devices by revoking all active sessions.
+ *
+ * @param {string} userId - The user ID.
+ */
+const logoutAll = async (userId) => {
+    await models.User.revokeAllSessions(userId);
+};
+
 const authService = {
     loginWithEmailAndPassword,
     verifySocialToken,
     registerUser,
     changeUserPassword,
+    refreshAuthTokens,
     logout,
+    logoutAll,
 };
 
 export default authService;

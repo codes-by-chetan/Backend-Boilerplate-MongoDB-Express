@@ -10,12 +10,17 @@ import { DbRequestsView } from "./components/views/DbRequestsView";
 import { DbAuditsView } from "./components/views/DbAuditsView";
 import { VersionsView } from "./components/views/VersionsView";
 import { LogViewerView } from "./components/views/LogViewerView";
+import { UsersView } from "./components/views/UsersView";
 import { useTheme } from "./hooks/useTheme";
 import { useSocket } from "./hooks/useSocket";
 import {
   getToken,
-  setStoredToken,
+  setStoredTokens,
+  clearStoredTokens,
   setOnUnauthorized,
+  onTokenRefreshed,
+  isUserAdmin,
+  getCurrentUser,
   api,
 } from "./api/client";
 import {
@@ -25,6 +30,7 @@ import {
   Database,
   ShieldCheck,
   GitBranch,
+  Users,
   Lock,
   LogIn,
 } from "lucide-react";
@@ -34,6 +40,7 @@ export function App() {
   const { theme, toggleTheme } = useTheme();
   const location = useLocation();
   const [token, setToken] = useState(() => getToken());
+  const [currentUser, setCurrentUser] = useState(() => getCurrentUser());
   const [isLoginOpen, setIsLoginOpen] = useState(false);
   const [authBanner, setAuthBanner] = useState("");
   const [systemStats, setSystemStats] = useState(null);
@@ -49,12 +56,45 @@ export function App() {
 
   useEffect(() => {
     setOnUnauthorized((msg) => {
-      setStoredToken("");
+      clearStoredTokens();
       setToken("");
+      setCurrentUser(null);
       setAuthBanner(msg);
       setIsLoginOpen(true);
     });
+
+    const unsubscribe = onTokenRefreshed((newToken) => {
+      if (newToken && !isUserAdmin(newToken)) {
+        clearStoredTokens();
+        setToken("");
+        setCurrentUser(null);
+        setAuthBanner("Access Denied: The authenticated account does not have Admin privileges.");
+        setIsLoginOpen(true);
+        return;
+      }
+      setToken(newToken);
+      setCurrentUser(getCurrentUser());
+    });
+
+    return unsubscribe;
   }, []);
+
+  // Enforce Admin role on startup and token change
+  useEffect(() => {
+    if (token) {
+      if (!isUserAdmin(token)) {
+        clearStoredTokens();
+        setToken("");
+        setCurrentUser(null);
+        setAuthBanner("Access Denied: Only accounts with the Admin role can access this portal.");
+        setIsLoginOpen(true);
+        return;
+      }
+      setCurrentUser(getCurrentUser());
+    } else {
+      setCurrentUser(null);
+    }
+  }, [token]);
 
   // Fetch initial system telemetry if token is available
   useEffect(() => {
@@ -70,15 +110,20 @@ export function App() {
     loadStats();
   }, [token]);
 
-  const handleLoginSuccess = (newToken) => {
-    setStoredToken(newToken);
-    setToken(newToken);
+  const handleLoginSuccess = (data) => {
+    const accessToken = typeof data === "string" ? data : data.accessToken;
+    const refreshToken = typeof data === "object" ? data.refreshToken : null;
+    setStoredTokens({ accessToken, refreshToken });
+    setToken(accessToken);
+    setCurrentUser(getCurrentUser());
     setAuthBanner("");
   };
 
-  const handleLogout = () => {
-    setStoredToken("");
+  const handleLogout = async () => {
+    await api.logout().catch(() => {});
+    clearStoredTokens();
     setToken("");
+    setCurrentUser(null);
     setSystemStats(null);
     setAuthBanner("Logged out successfully.");
   };
@@ -90,6 +135,7 @@ export function App() {
     { id: "db-requests", label: "HTTP Requests", path: "/db-requests", icon: Database, requiresAuth: true },
     { id: "db-audits", label: "Audit Trails", path: "/db-audits", icon: ShieldCheck, requiresAuth: true },
     { id: "versions", label: "Time Machine", path: "/versions", icon: GitBranch, requiresAuth: true },
+    { id: "users", label: "Users", path: "/users", icon: Users, requiresAuth: true },
   ];
 
   const currentPath = location.pathname;
@@ -101,6 +147,7 @@ export function App() {
         theme={theme}
         onToggleTheme={toggleTheme}
         token={token}
+        currentUser={currentUser}
         onOpenLogin={() => setIsLoginOpen(true)}
         onLogout={handleLogout}
         socketConnected={socketConnected}
@@ -247,6 +294,16 @@ export function App() {
                   <AuthRequiredCard onOpenLogin={() => setIsLoginOpen(true)} title="Mongoose Version Time-Machine & Rollback" />
                 ) : (
                   <VersionsView />
+                )
+              }
+            />
+            <Route
+              path="/users"
+              element={
+                !token ? (
+                  <AuthRequiredCard onOpenLogin={() => setIsLoginOpen(true)} title="User Directory & Role Access" />
+                ) : (
+                  <UsersView />
                 )
               }
             />

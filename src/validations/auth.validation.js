@@ -26,6 +26,12 @@ const login = {
         .or("userName", "email"), // Ensures that at least one of userName or email is provided
 };
 
-const authValidations = { register, login };
+const refreshTokens = {
+    body: Joi.object().keys({
+        refreshToken: Joi.string().optional(),
+    }),
+};
+
+const authValidations = { register, login, refreshTokens };
 
 export default authValidations;

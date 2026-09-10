@@ -6,6 +6,7 @@ import getIpDetails from "./getIpDetails.js";
 import getHostIpAddress from "./hostIP.js";
 import { sendMail, sendTestMail } from "./mailer.js";
 import pick from "./pick.js";
+import cryptoUtil from "./crypto.util.js";
 
 const utils = {
     ApiError,
@@ -17,6 +18,7 @@ const utils = {
     sendMail,
     sendTestMail,
     pick,
+    cryptoUtil,
 };
 
 export {
@@ -29,6 +31,7 @@ export {
     sendMail,
     sendTestMail,
     pick,
+    cryptoUtil,
 };
 
 export default utils;

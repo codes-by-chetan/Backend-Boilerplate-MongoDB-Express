@@ -9,6 +9,8 @@ import models from "../models/index.js";
 import { getLiveMetrics } from "../sockets/socket.js";
 import ApiResponse from "../utils/ApiResponse.js";
 import diffUtil from "../utils/diff.util.js";
+import { decryptText, findEncryptedFieldPaths } from "../utils/crypto.util.js";
+import config from "../config/env.config.js";
 
 const logsDirectory = path.join(process.cwd(), "logs");
 const safeLogFileNamePattern = /^logs-\d{4}-\d{2}-\d{2}\.html$/;
@@ -253,6 +255,7 @@ export const getDbRequestLogs = asyncHandler(async (req, res) => {
             .skip(skip)
             .limit(limit)
             .populate("user", "email fullName role")
+            .allowDiskUse(true)
             .lean(),
     ]);
 
@@ -687,6 +690,214 @@ export const rollbackDocument = asyncHandler(async (req, res) => {
     );
 });
 
+export const decryptField = asyncHandler(async (req, res) => {
+    const { cipherText, cipherTexts, items, reason, logId, fieldName, fields } = req.body;
+
+    if (!reason || typeof reason !== "string" || reason.trim().length < 5) {
+        throw new ApiError(
+            httpStatus.BAD_REQUEST,
+            "A valid justification/reason (minimum 5 characters) is required to decrypt confidential data."
+        );
+    }
+
+    // Resolve logUrl and build real field path map from RequestLog if logId is provided
+    let logUrl = "";
+    const logFieldMap = new Map();
+
+    if (logId && mongoose.Types.ObjectId.isValid(logId)) {
+        const reqLog = await models.RequestLog.findById(logId).lean();
+        if (reqLog) {
+            logUrl = reqLog.requestUrl || "";
+            const discovered = findEncryptedFieldPaths(reqLog);
+            for (const item of discovered) {
+                if (item.cipherText && item.fieldName) {
+                    logFieldMap.set(item.cipherText, item.fieldName);
+                }
+            }
+        }
+    }
+
+    // Helper to normalize and resolve the accurate DB key name
+    const resolveFieldName = (rawName, cipher) => {
+        if (cipher && logFieldMap.has(cipher)) {
+            return logFieldMap.get(cipher);
+        }
+        if (!rawName || typeof rawName !== "string") return "payload";
+        let normalized = rawName.trim();
+        // If caller passed body.* or header.*, map to actual RequestLog schema fields
+        if (normalized.startsWith("body.")) {
+            normalized = `requestBody.${normalized.slice(5)}`;
+        } else if (normalized.startsWith("header.")) {
+            normalized = `requestHeaders.${normalized.slice(7)}`;
+        }
+        return normalized;
+    };
+
+    // Build the list of decryption tasks: [{ fieldName, cipherText }]
+    const decryptionTasks = [];
+    const seenCiphers = new Set();
+
+    if (Array.isArray(items) && items.length > 0) {
+        for (const it of items) {
+            if (it && it.cipherText && !seenCiphers.has(it.cipherText)) {
+                decryptionTasks.push({
+                    fieldName: resolveFieldName(it.fieldName, it.cipherText),
+                    cipherText: it.cipherText,
+                });
+                seenCiphers.add(it.cipherText);
+            }
+        }
+    } else if (Array.isArray(cipherTexts) && cipherTexts.length > 0) {
+        for (let i = 0; i < cipherTexts.length; i++) {
+            const ct = cipherTexts[i];
+            if (ct && !seenCiphers.has(ct)) {
+                const rawFn = Array.isArray(fields) && fields[i] ? fields[i] : (fieldName || `field_${i + 1}`);
+                decryptionTasks.push({
+                    fieldName: resolveFieldName(rawFn, ct),
+                    cipherText: ct,
+                });
+                seenCiphers.add(ct);
+            }
+        }
+    } else if (cipherText && typeof cipherText === "string") {
+        const rawFn = fieldName || (Array.isArray(fields) && fields[0]) || "payload";
+        decryptionTasks.push({
+            fieldName: resolveFieldName(rawFn, cipherText),
+            cipherText,
+        });
+    }
+
+    // If logId was provided and no tasks were explicitly matched, fallback to all encrypted fields in reqLog
+    if (decryptionTasks.length === 0 && logFieldMap.size > 0) {
+        for (const [ct, fn] of logFieldMap.entries()) {
+            decryptionTasks.push({ fieldName: fn, cipherText: ct });
+        }
+    }
+
+    if (decryptionTasks.length === 0) {
+        throw new ApiError(httpStatus.BAD_REQUEST, "No valid cipherText or items provided to decrypt");
+    }
+
+    // Decrypt all fields
+    const decryptedResults = [];
+    const decryptedFieldNames = [];
+
+    for (const task of decryptionTasks) {
+        try {
+            const plainText = decryptText(task.cipherText, config.logEncryptionKey);
+            decryptedResults.push({
+                fieldName: task.fieldName,
+                cipherText: task.cipherText,
+                plainText,
+            });
+            decryptedFieldNames.push(task.fieldName);
+        } catch (err) {
+            decryptedResults.push({
+                fieldName: task.fieldName,
+                cipherText: task.cipherText,
+                error: err.message,
+            });
+        }
+    }
+
+    // Create a SINGLE consolidated audit log entry for this decryption operation
+    const auditEntry = await models.DecryptionAuditLog.create({
+        logId: logId && mongoose.Types.ObjectId.isValid(logId) ? logId : undefined,
+        logUrl,
+        fields: decryptedFieldNames.length > 500 ? decryptedFieldNames.slice(0, 500) : decryptedFieldNames,
+        fieldsCount: decryptedFieldNames.length,
+        fieldName:
+            decryptedFieldNames.length > 25
+                ? `${decryptedFieldNames.slice(0, 25).join(", ")} ... (+${decryptedFieldNames.length - 25} more)`
+                : decryptedFieldNames.join(", "),
+        decryptedBy: req.user._id,
+        decryptedByEmail: req.user.email,
+        reason: reason.trim(),
+        ipAddress: req.headers["x-forwarded-for"] || req.socket?.remoteAddress || req.ip || "",
+        userAgent: req.headers["user-agent"] || "",
+    });
+
+    res.status(200).json(
+        new ApiResponse(
+            200,
+            {
+                plainText: decryptedResults[0]?.plainText,
+                decryptedResults,
+                fields: decryptedFieldNames,
+                fieldsCount: decryptedFieldNames.length,
+                auditLogId: auditEntry._id,
+                timestamp: auditEntry.createdAt,
+            },
+            `Successfully decrypted ${decryptedFieldNames.length} field(s) with a single audit entry recorded.`
+        )
+    );
+});
+
+export const getDecryptionAuditLogs = asyncHandler(async (req, res) => {
+    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 20));
+    const skip = (page - 1) * limit;
+
+    const filter = {};
+
+    if (req.query.search) {
+        const searchRegex = { $regex: req.query.search.trim(), $options: "i" };
+        filter.$or = [
+            { decryptedByEmail: searchRegex },
+            { reason: searchRegex },
+            { logUrl: searchRegex },
+            { fieldName: searchRegex },
+            { fields: searchRegex },
+            { ipAddress: searchRegex },
+        ];
+    }
+
+    if (req.query.dateFrom || req.query.dateTo) {
+        filter.createdAt = {};
+        if (req.query.dateFrom) {
+            filter.createdAt.$gte = new Date(req.query.dateFrom);
+        }
+        if (req.query.dateTo) {
+            const end = new Date(req.query.dateTo);
+            end.setHours(23, 59, 59, 999);
+            filter.createdAt.$lte = end;
+        }
+    }
+
+    const order = req.query.order === "asc" ? 1 : -1;
+    const sort = { createdAt: order };
+
+    const [total, audits] = await Promise.all([
+        models.DecryptionAuditLog.countDocuments(filter),
+        models.DecryptionAuditLog.find(filter)
+            .sort(sort)
+            .skip(skip)
+            .limit(limit)
+            .populate("decryptedBy", "email fullName role")
+            .lean(),
+    ]);
+
+    res.status(200).json(
+        new ApiResponse(
+            200,
+            {
+                audits,
+                pagination: {
+                    page,
+                    limit,
+                    total,
+                    totalPages: Math.ceil(total / limit) || 1,
+                },
+                filters: {
+                    search: req.query.search || "",
+                    order: req.query.order === "asc" ? "asc" : "desc",
+                },
+            },
+            "Decryption audit logs retrieved successfully"
+        )
+    );
+});
+
 const logsController = {
     getAllLogs,
     getLogByFileName,
@@ -701,6 +912,8 @@ const logsController = {
     getDocumentVersion,
     compareDocumentVersions,
     rollbackDocument,
+    decryptField,
+    getDecryptionAuditLogs,
 };
 
 export default logsController;
