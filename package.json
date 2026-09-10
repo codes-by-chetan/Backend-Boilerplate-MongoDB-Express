@@ -11,6 +11,7 @@
     "dev:admin": "pnpm --filter @boilerplate/admin dev",
     "build:admin": "pnpm --filter @boilerplate/admin build",
     "build:frontend": "pnpm --filter \"@boilerplate/*\" build",
+    "screenshots": "node scripts/take-screenshots.js",
     "start": "node src/index.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
@@ -40,6 +41,7 @@
   },
   "devDependencies": {
     "nodemon": "^3.1.14",
-    "prettier": "^3.9.6"
+    "prettier": "^3.9.6",
+    "puppeteer-core": "^25.10.0"
   }
 }

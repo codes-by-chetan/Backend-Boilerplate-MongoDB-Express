@@ -9,6 +9,7 @@ Featuring **Git-like document versioning & time-travel rollback**, **dual-layer 
 ## 📑 Table of Contents
 
 - [Features Overview](#-features-overview)
+- [Admin Dashboard & Visual Tour](#-admin-dashboard--visual-tour)
 - [Architecture & Tech Stack](#-architecture--tech-stack)
 - [Project Directory Structure](#-project-directory-structure)
 - [Getting Started](#-getting-started)
@@ -35,6 +36,11 @@ Featuring **Git-like document versioning & time-travel rollback**, **dual-layer 
   - [Notifications (`/api/notifications`)](#notifications-apinotifications)
   - [Audit, Versioning & Logs (`/api/logs`)](#audit-versioning--logs-apilogs)
 - [Mongoose Plugins & Reusable Schemas](#-mongoose-plugins--reusable-schemas)
+  - [1. `paginate` Plugin](#1-paginate-plugin)
+  - [2. `privatePlugin`](#2-privateplugin)
+  - [3. `softDelete` Plugin](#3-softdelete-plugin)
+  - [4. `versioning` Plugin (Complete Guide)](#4-versioning-plugin)
+  - [5. Reusable Schemas](#5-reusable-schemas-srcmodelsreusableschemas)
 - [Standardized API Response & Error Handling](#-standardized-api-response--error-handling)
 - [Available Scripts](#-available-scripts)
 - [License](#-license)
@@ -102,6 +108,102 @@ Featuring **Git-like document versioning & time-travel rollback**, **dual-layer 
   - Reusable Mongoose schemas: `address`, `avatar`, `contactNumber`, `fullName`, `logo`.
   - Built-in Mongoose plugins: `paginate`, `privatePlugin`, `softDelete`, `versioning`.
   - Request validation via Joi schemas.
+
+---
+
+## 📸 Admin Dashboard & Visual Tour
+
+The boilerplate includes a production-grade observability and administrative control center located at **`/admin`** (served directly by Express or run independently with Vite).
+
+Below is an interactive visual tour of the primary dashboards:
+
+---
+
+### 1. ⚡ System Telemetry & V8 Metrics
+*Real-time hardware resource monitoring, memory allocation, Node.js process internals, and MongoDB cluster status.*
+
+![System Telemetry Dashboard](https://raw.githubusercontent.com/codes-by-chetan/Backend-Boilerplate-MongoDB-Express/main/public/screenshots/01-system-telemetry.png)
+
+- **Hardware Gauges**: Live CPU load averages (1m, 5m, 15m), Host RAM utilization percentage, and Node.js V8 Heap memory distribution.
+- **Process & Cluster Health**: Live process uptime counter, Process ID (PID), Host architecture diagnostics, and MongoDB cluster connection state.
+- **Record Counters**: Live count badges for registered users, HTTP request logs, and versioned database audit commits.
+- **Raw Telemetry JSON**: Expandable and copyable full system snapshot payload for automated diagnostic reporting.
+
+---
+
+### 2. 📡 Real-Time WebSocket Log Stream
+*Live streaming event console with instant search filtering, pause/resume controls, and in-flight request tracking.*
+
+![Real-Time Log Stream](https://raw.githubusercontent.com/codes-by-chetan/Backend-Boilerplate-MongoDB-Express/main/public/screenshots/02-realtime-stream.png)
+
+- **Bi-Directional Socket.IO Telemetry**: Instant push of newly recorded HTTP requests, errors, and database commits.
+- **In-Flight Request Counter**: Real-time tracker showing concurrent active requests currently executing on the server.
+- **Interactive Controls**: Auto-scroll toggles, instant pause/resume buffer, and dynamic log level filtering (`INFO`, `WARN`, `ERROR`).
+
+---
+
+### 3. 🛡️ HTTP Request Logs & Zero-Leak Encryption at Rest
+*Comprehensive MongoDB request logging with automatic cryptographic protection of sensitive payloads.*
+
+![MongoDB HTTP Request Logs](https://raw.githubusercontent.com/codes-by-chetan/Backend-Boilerplate-MongoDB-Express/main/public/screenshots/03-http-request-logs.png)
+
+- **Complete Request History**: Paginated table detailing HTTP Method (`GET`, `POST`, `PUT`, `DELETE`), Response Status (`200`, `201`, `400`, `401`, `500`), Client IP, Authenticated User Email, and precise Execution Timestamp.
+- **Advanced Filtering**: Instant filtering by Method, Status category (Successful vs. Failed), HTTP status code, and free-text search across URLs and IPs.
+- **Encrypted Payloads at Rest**: Raw passwords, authorization headers, refresh tokens, and cookies are automatically stored as `[ENCRYPTED:AES-256-GCM]` ciphertexts, guaranteeing zero plaintext credential leakage in databases or backups.
+
+---
+
+### 4. 🔑 Role-Gated Confidential Data Decryption
+*Authorized administrators can temporarily decrypt confidential fields with mandatory justification logging.*
+
+![Confidential Field Decryption Justification](https://raw.githubusercontent.com/codes-by-chetan/Backend-Boilerplate-MongoDB-Express/main/public/screenshots/04-confidential-field-decryption.png)
+
+- **Security Compliance Policy**: Enforces strict SOC2, HIPAA, and PCI-DSS compliance before confidential data can be accessed.
+- **Mandatory Justification**: Administrators must provide a non-empty business justification (minimum 5 characters, e.g. *"Auditing authentication credentials and verifying token entropy for SOC2 compliance"*).
+- **Target Context**: Clearly displays target endpoint (`POST /api/auth/admin/login`), detected encrypted field badges (`requestBody.password`, `responseBody.data.accessToken`, etc.), and provides a dedicated loading state (`Loader2`) during cryptographic computation.
+
+---
+
+### 5. 📜 Permanent Immutable Decryption Audit Trail
+*Every decryption action is recorded permanently in MongoDB with full administrator attribution and canonical field paths.*
+
+![Confidential Decryption Audit Trail](https://raw.githubusercontent.com/codes-by-chetan/Backend-Boilerplate-MongoDB-Express/main/public/screenshots/05-decryption-audit-trail.png)
+
+- **Tamper-Proof Audit Records**: Tracks exact timestamp, administrator name & email, target endpoint URL, administrator client IP address, and stated justification reason.
+- **Canonical Database Dot-Notation**: Displays exact database field paths decrypted (`requestBody.password`, `responseBody.data.refreshToken`, `requestHeaders.authorization`) rather than generic placeholders.
+- **Single Consolidated Commit**: One immutable log entry per batch decryption with exact decrypted fields count badge.
+
+---
+
+### 6. 👥 User Management & Multi-Device Active Sessions
+*Granular user directory with role-based access control and multi-device session inspector.*
+
+![User Management and Active Sessions](https://raw.githubusercontent.com/codes-by-chetan/Backend-Boilerplate-MongoDB-Express/main/public/screenshots/06-user-management-sessions.png)
+
+- **User Directory**: View account statuses (`ACTIVE` vs. `SUSPENDED`), role badges (`ADMIN`, `USER`, `MANAGER`), avatar initials, and active session counters.
+- **Multi-Device Session Inspector**: Click any session badge to view all active connected devices for that user, including device type (Desktop, Mobile, Tablet), browser, operating system, client IP, login timestamp, and token expiration.
+- **Remote Revocation**: Revoke individual suspect sessions with the **Terminate** button or revoke all active logins instantly with the **Terminate All Sessions** kill switch.
+
+---
+
+### 7. 🕰️ Git-Like Document Versioning & Time Machine
+*Enterprise revision tracking, deep delta diff inspection, and point-in-time document rollback.*
+
+![Document Revision Timeline](https://raw.githubusercontent.com/codes-by-chetan/Backend-Boilerplate-MongoDB-Express/main/public/screenshots/07-versioning-time-machine.png)
+
+- **Visual Commit Timeline**: Chronological revision history (v1, v2, v3, ...) for any versioned Mongoose model (`User`, `UserProfile`, `Notification`, etc.).
+- **Transaction Types**: Clear color-coded badges for `INSERT` (initial commit), `UPDATE` (field modification), `DELETE` (tombstone commit), and `ROLLBACK`.
+- **Deep Git-Like Diffs**: Highlights exact field changes with old vs. new values and path notation.
+- **Reconstruct & Rollback**: "Reconstruct State" allows previewing the document snapshot at any historical version, and "Rollback to vX" restores or resurrects the document in a single click.
+
+---
+
+### 8. 🗄️ Database Audit Commits Explorer
+*Unified audit commit explorer across all collections in the MongoDB database.*
+
+![Database Audit Commits](https://raw.githubusercontent.com/codes-by-chetan/Backend-Boilerplate-MongoDB-Express/main/public/screenshots/08-database-audit-logs.png)
+
+- **Collection Explorer**: Filter transactions across affected collections, review commit summaries, affected document IDs, and actor attribution.
 
 ---
 
@@ -565,18 +667,28 @@ Incoming HTTP Request
 
 ## 🖥️ Integrated React Admin Dashboard
 
-Access the pre-built admin panel at **`http://localhost:5000/admin`**.
+Access the production admin panel at **`http://localhost:3000/admin`** (or configured `PORT`).
 
-### Dashboard Features:
-1. **System Health**: Real-time CPU, memory, heap usage, and server uptime cards.
-2. **Live Stream**: Real-time event monitor with pause/resume, search filter, and auto-scroll.
-3. **HTTP Request Inspector**: Filter requests by HTTP status (2xx, 3xx, 4xx, 5xx), method, and duration.
-4. **Audit Log Trail**: Explore all insert, update, delete, and rollback transactions across collections.
-5. **Git Versioning & Time-Travel Explorer**:
+> [!TIP]
+> **Default Admin Credentials (Bootstrap Account)**:
+> - **Email**: `admin@example.com`
+> - **Password**: `admin12345`
+> - *Auto-bootstrapped upon first server startup with full `admin` role privileges.*
+
+### Dashboard Capabilities:
+1. **System Health & Telemetry**: Live CPU, memory, V8 heap usage, process uptime, and MongoDB cluster status.
+2. **Live WebSocket Stream**: Real-time event monitor with pause/resume, search filter, and auto-scroll.
+3. **HTTP Request Inspector & Encryption**: Filter requests by HTTP status (2xx, 3xx, 4xx, 5xx), method, and duration with zero-leak field encryption.
+4. **Role-Gated Confidential Decryption**: Temporarily decrypt confidential fields (passwords, tokens, cookies) with mandatory justification.
+5. **Permanent Decryption Audit Trail**: Immutable security audit records of all administrator decryptions with canonical database key paths.
+6. **User Directory & Multi-Device Sessions**: Manage user accounts, status, RBAC roles, inspect active device sessions, and perform remote termination.
+7. **Git-Like Time Machine (Versioning & Rollback)**:
    - Browse documents by model (`User`, `UserProfile`, `Notification`, etc.).
    - Visual commit timeline modal showing user details, timestamp, and diff summary.
    - Side-by-side JSON diff comparison viewer between any two versions.
    - **One-Click Rollback / Resurrection Modal**: Select any previous revision to restore or resurrect deleted records.
+
+👉 **See the complete [Admin Dashboard & Visual Tour](#-admin-dashboard--visual-tour) for full-resolution screenshots of every screen.**
 
 ---
 
@@ -698,77 +810,165 @@ userSchema.plugin(plugins.softDelete);
 await user.softDelete();
 ```
 
-### 4. `versioning` Plugin
-Provides enterprise Git-like revision commit history, deep delta calculation, point-in-time reconstruction, and rollback/resurrection for any Mongoose model.
+### 4. `versioning` Plugin (Complete Step-by-Step Guide)
 
-#### How to Enable on a Schema:
+The `versioning` plugin (`src/models/plugins/versioning.plugin.js`) gives any Mongoose model enterprise-grade Git-like revision history, deep delta calculation, point-in-time reconstruction, and one-click rollback/resurrection.
+
+![Document Revision Timeline in Admin Time Machine](https://raw.githubusercontent.com/codes-by-chetan/Backend-Boilerplate-MongoDB-Express/main/public/screenshots/07-versioning-time-machine.png)
+
+---
+
+#### Step 1: Import & Register on Schema
+
+Register the plugin on any Mongoose schema before compiling the model:
+
 ```javascript
 import mongoose from "mongoose";
-import plugins from "./plugins/index.js";
+import plugins from "./plugins/index.js"; // or import versioning from "./plugins/versioning.plugin.js"
 
-const orderSchema = new mongoose.Schema({
-    orderNumber: { type: String, required: true },
-    status: { type: String, default: "pending" },
-    totalAmount: { type: Number, required: true },
-    items: [{ name: String, quantity: Number, price: Number }],
+const articleSchema = new mongoose.Schema({
+    title: { type: String, required: true },
+    content: { type: String, required: true },
+    tags: [{ type: String }],
+    status: { type: String, enum: ["draft", "published", "archived"], default: "draft" },
+    publishedAt: { type: Date },
+}, { timestamps: true });
+
+// Attach the versioning plugin with optional configurations
+articleSchema.plugin(plugins.versioning, {
+    collectionName: "Article",                     // Name stored in DbLogs.affectedCollection (defaults to model name)
+    excludeFieldsOnRollback: ["publishedAt"],     // Fields preserved and not overwritten during rollbacks
+    includeSensitiveOnRollback: false,            // Shields passwords, tokens, and secrets from historical overwrite
 });
 
-// Register the versioning plugin
-orderSchema.plugin(plugins.versioning, {
-    collectionName: "Order", // optional, defaults to model name
-    excludeFieldsOnRollback: ["paymentTransactionId"], // fields to preserve on rollback
-    includeSensitiveOnRollback: false, // default false, shields passwords and secrets
-});
-
-const Order = mongoose.model("Order", orderSchema);
-export default Order;
+const Article = mongoose.model("Article", articleSchema);
+export default Article;
 ```
 
-#### Plugin Options:
+#### Plugin Options Reference:
 | Option | Type | Default | Description |
 |---|---|---|---|
 | `collectionName` | `string` | `model.modelName` | Name of the collection stored in `DbLogs.affectedCollection`. |
 | `excludeFieldsOnRollback` | `string[]` | `[]` | Array of field keys that will not be overwritten when rolling back to an older version. |
-| `includeSensitiveOnRollback` | `boolean` | `false` | When `false`, fields matching sensitive keywords (`password`, `token`, `secret`, etc.) are never overwritten with historical states during rollback. |
+| `includeSensitiveOnRollback` | `boolean` | `false` | When `false`, fields matching sensitive keywords (`password`, `token`, `secret`, `hash`) are never overwritten with historical values during rollback. |
 
-#### Model Static Methods Provided:
-The plugin automatically injects static methods on the Mongoose model:
+---
+
+#### Step 2: Attaching User Attribution Context (`_reqContext`)
+
+When saving or updating a document from an Express controller or service, attach `_reqContext` to the Mongoose document before calling `.save()`. The plugin automatically captures this context and attributes the revision commit to the user and their IP address:
 
 ```javascript
-// 1. Fetch entire commit history for a document
-const commits = await Order.getDocHistory(orderId);
-// Returns chronological array of DbLogs records (v1, v2, ..., vn)
+// In your controller or service:
+const updateArticle = async (req, res) => {
+    const article = await Article.findById(req.params.id);
+    if (!article) throw new ApiError(404, "Article not found");
 
-// 2. Reconstruct document state at any specific historical version
-const { state, currentVersion, isDeleted } = await Order.reconstructDocVersion(orderId, 2);
-// Returns the reconstructed document snapshot at version 2
+    article.title = req.body.title;
+    article.content = req.body.content;
 
-// 3. Rollback active document OR resurrect deleted document to a specific version
-const result = await Order.rollbackDocToVersion(orderId, 1, {
+    // Attach user attribution context before saving
+    article._reqContext = {
+        user: req.user?._id || null,
+        ipAddress: req.ipDetails?.clientIp || req.ip,
+        origin: req.headers.origin,
+    };
+
+    await article.save();
+    // Automatically generates a v(n+1) update commit in DbLogs linked to req.user._id!
+};
+```
+
+---
+
+#### Step 3: How Revision Commits Are Recorded Automatically
+
+The plugin hooks into Mongoose lifecycle events (`post("init")`, `pre("save")`, `post("save")`, and `pre("deleteOne")`):
+
+1. **Initial Creation (`isNew`)**:
+   - Creates revision **`v1`** with `transactionType: "insert"`.
+   - Stores a complete baseline snapshot of all document fields (excluding `_id`) in `DbLogs`.
+2. **Deep Delta Updates (`isModified()`)**:
+   - Calculates a recursive field-level diff between the original baseline and the current modified document.
+   - Computes added, modified, and deleted properties in dot-notation (`tags.0`, `status`, etc.).
+   - Increments the version number (**`v2`**, **`v3`**, ...) and stores only the delta patch.
+   - **No Wasteful Commits**: If no actual business fields changed, no empty commit is generated.
+3. **Deletions / Soft-Deletes**:
+   - When calling `doc.deleteOne()` or `doc.softDelete()`, the plugin records a tombstone revision commit with `transactionType: "delete"` and a final snapshot of the document before removal.
+
+---
+
+#### Step 4: Fetching Document Revision History
+
+Use the model static method `getDocHistory(docId)` to fetch the complete chronological commit log:
+
+```javascript
+const commits = await Article.getDocHistory(articleId);
+
+// Returns array of DbLogs records:
+// [
+//   { version: 1, transactionType: "insert", summary: "Initial commit (v1)", createdAt: ... },
+//   { version: 2, transactionType: "update", summary: "title modified, status modified", diff: { ... }, user: { email: ... } },
+//   { version: 3, transactionType: "update", summary: "content modified", diff: { ... } }
+// ]
+```
+
+---
+
+#### Step 5: Point-in-Time State Reconstruction
+
+Reconstruct what a document looked like at any historical version $v$ without modifying the database:
+
+```javascript
+// Reconstruct Article at version 1
+const { state, currentVersion, isDeleted } = await Article.reconstructDocVersion(articleId, 1);
+
+console.log("Reconstructed document state at v1:", state);
+console.log("Active live version in DB:", currentVersion);
+console.log("Is document currently deleted?", isDeleted);
+```
+
+The reconstruction algorithm fetches the initial baseline snapshot (v1) and sequentially applies all forward delta patches up to version $v$.
+
+---
+
+#### Step 6: Rolling Back or Resurrecting a Document
+
+Use `rollbackDocToVersion(docId, targetVersion, context)` to revert an active document to an older version OR resurrect a deleted document:
+
+```javascript
+// Rollback article to version 1
+const rollbackResult = await Article.rollbackDocToVersion(articleId, 1, {
     user: req.user._id,
     ipAddress: req.ip,
     origin: req.headers.origin,
 });
-// Returns: { document, version: newVersionNumber, rolledBackToVersion: 1 }
+
+console.log(rollbackResult);
+// Output:
+// {
+//   document: { _id: ..., title: "Original Title", ... },
+//   version: 4,                      // Newly generated incremental rollback commit
+//   rolledBackToVersion: 1,          // Target version restored
+//   restoredPropertiesCount: 3,
+//   preservedFields: ["publishedAt"] // Excluded fields preserved as configured
+// }
 ```
 
-#### User Attribution Context:
-To attribute document saves and updates to the authenticated user and their IP address in the `DbLogs` audit trail:
-```javascript
-// In your controller or service:
-const order = await Order.findById(orderId);
-order.status = "shipped";
+**Key Rollback Features:**
+- **Audit-Safe**: Rather than deleting historical commit records, rollback creates a brand new incremental commit (e.g. `v4`) with `transactionType: "rollback"`, preserving a full audit trail of the restoration.
+- **Resurrection Support**: If the document was hard-deleted or soft-deleted, `rollbackDocToVersion` automatically resurrects it with its original `_id`.
+- **Sensitive Credential Shielding**: If `includeSensitiveOnRollback: false` (default), sensitive fields (such as `password` hashes, active session tokens, and API secrets) are never overwritten with obsolete historical values.
 
-// Attach user context before saving
-order._reqContext = {
-    user: req.user._id,
-    ipAddress: req.ipDetails?.clientIp || req.ip,
-    origin: req.headers.origin,
-};
+---
 
-await order.save();
-// Automatically creates a v(n+1) update commit in DbLogs linked to req.user._id
-```
+#### Step 7: Managing Versions via Admin Portal
+
+All models with the `versioning` plugin are automatically discovered and accessible in the **Time Machine** tab of the React Admin Dashboard (`/admin/versions`):
+- View all versioned models in real time (`Article`, `User`, `UserProfile`, `Notification`).
+- Click **"Revisions"** to inspect the visual commit timeline.
+- Click **"Compare"** to view side-by-side Git diffs between any two versions.
+- Click **"Rollback to vX"** to trigger instantaneous time-travel rollback or resurrection with user confirmation.
 
 ### 5. Reusable Schemas (`src/models/reusableSchemas`)
 - `fullNameSchema`: Standardized `{ firstName, lastName }` with trimming and validation.
