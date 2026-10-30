@@ -29,6 +29,13 @@ router.post(
     controllers.authController.login
 );
 
+// Admin dedicated login endpoint
+router.post(
+    "/admin/login",
+    validate(validations.authValidations.login),
+    controllers.authController.adminLogin
+);
+
 // 3. Social Authentication
 router.post(
     "/verify-social-token",
@@ -72,11 +79,17 @@ router.post(
     controllers.authController.unlockAccount
 );
 
-// 6. Layer 6: Session Management & Refresh Token Endpoint
+// 6. Layer 6: Session Management & Refresh Token Endpoints
+router.post(
+    "/refresh-tokens",
+    validate(validations.authValidations.refreshTokens),
+    controllers.authController.refreshTokens
+);
+
 router.post(
     "/refresh-token",
-    validate(validations.authValidations.refreshToken),
-    controllers.authController.refreshToken
+    validate(validations.authValidations.refreshTokens),
+    controllers.authController.refreshTokens
 );
 
 // 7. Layer 7: Two-Factor Authentication (2FA Step-up Login Challenge)
@@ -107,6 +120,7 @@ router.get("/refresh-user", controllers.authController.getUserDetails);
 // Logout: Supports POST (recommended standard) and GET (legacy backward compatibility)
 router.post("/logout", controllers.authController.logout);
 router.get("/logout", controllers.authController.logout);
+router.post("/logout-all", controllers.authController.logoutAll);
 
 const authRouter = router;
 export default authRouter;

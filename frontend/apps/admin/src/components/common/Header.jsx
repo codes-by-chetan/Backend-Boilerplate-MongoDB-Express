@@ -17,6 +17,7 @@ export function Header({
   theme,
   onToggleTheme,
   token,
+  currentUser,
   onOpenLogin,
   onLogout,
   socketConnected,
@@ -85,6 +86,14 @@ export function Header({
           >
             {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
           </Button>
+
+          {/* Admin User Badge */}
+          {token && currentUser && (
+            <div className="hidden lg:flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-primary/30 bg-primary/10 text-[11px] text-primary font-medium">
+              <Shield className="h-3 w-3" />
+              <span>Admin: {currentUser.email || currentUser.userName || "Authenticated"}</span>
+            </div>
+          )}
 
           {/* Auth Button */}
           {token ? (

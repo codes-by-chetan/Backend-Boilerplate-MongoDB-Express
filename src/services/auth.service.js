@@ -18,14 +18,15 @@ import qrcode from "qrcode";
 const googleClient = new OAuth2Client(config.google_client_id);
 
 /**
- * Authenticates a user using email/username and password.
+ * Authenticates a user using email/username and password, with optional role enforcement.
  * Implements Layer 3 (Progressive Warnings, 3-Strike 24h Lockout, Threat Notification)
  * and Anti-Enumeration protections.
  *
- * @param {Object} req - Express request object containing credentials in req.body.
- * @returns {Promise<Object>} - Access token, refresh token, and session metadata.
+ * @param {Object} req - The express request object containing credentials in req.body.
+ * @param {Object} [options] - Additional login constraints (e.g. allowedRoles).
+ * @returns {Promise<Object>} - Resolves to the access token, refresh token, and session metadata.
  */
-const loginWithEmailAndPassword = async (req) => {
+const loginWithEmailAndPassword = async (req, options = {}) => {
     const credentials = req.body;
 
     if (!credentials.userName && !credentials.email) {
@@ -35,12 +36,16 @@ const loginWithEmailAndPassword = async (req) => {
         );
     }
 
-    const user = await userService.findOneUser(
-        credentials.email,
-        credentials.userName
-    );
+    if (!credentials.password) {
+        throw new ApiError(httpStatus.BAD_REQUEST, "Password is required for login.");
+    }
 
-    // Anti-enumeration: Use uniform error message rather than revealing account existence
+    const query = credentials.email
+        ? { email: credentials.email.toLowerCase().trim() }
+        : { userName: credentials.userName.toLowerCase().trim() };
+
+    const user = await models.User.findOne(query);
+
     if (!user) {
         throw new ApiError(httpStatus.UNAUTHORIZED, "Invalid email or password.");
     }
@@ -125,26 +130,39 @@ const loginWithEmailAndPassword = async (req) => {
                 browser: uaInfo.browser,
                 os: uaInfo.os,
                 device: uaInfo.device,
-                location: "Local / Private Network",
-                timestamp: new Date().toUTCString(),
+                city: "Localhost / Gateway",
+                region: "Internal Network",
+                country: "Loopback",
             };
 
-            const unlockLink = resolveClientAppUrl(req, `/unlock-account?token=${unlockToken}`);
-            const resetPasswordLink = resolveClientAppUrl(req, `/reset-password?token=${resetToken}`);
+            // Optional: enrich geolocation if ipinfo token configured
+            if (config.geolocation?.ipinfoToken && forensicData.ip && !forensicData.ip.includes("127.0.0.1")) {
+                try {
+                    const geoRes = await axios.get(`https://ipinfo.io/${forensicData.ip}?token=${config.geolocation.ipinfoToken}`, { timeout: 3000 });
+                    if (geoRes.data) {
+                        forensicData.city = geoRes.data.city || forensicData.city;
+                        forensicData.region = geoRes.data.region || forensicData.region;
+                        forensicData.country = geoRes.data.country || forensicData.country;
+                    }
+                } catch (_) {}
+            }
 
-            // Asynchronously dispatch threat alert email (does not delay HTTP response)
-            mailService.sendAccountLockoutAlertEmail(
-                user,
-                forensicData,
-                unlockLink,
-                resetPasswordLink
-            ).catch((err) => {
-                console.error("Lockout threat email dispatch error:", err.message);
-            });
+            // Dispatch intrusion alert email asynchronously
+            mailService
+                .sendAccountLockoutNotification(
+                    user.email,
+                    unlockToken,
+                    resetToken,
+                    forensicData,
+                    req
+                )
+                .catch((err) => {
+                    console.error(`Failed to dispatch lockout email to ${user.email}: ${err.message}`);
+                });
 
             throw new ApiError(
                 httpStatus.FORBIDDEN,
-                `Account has been temporarily locked for ${lockoutHours} hours due to ${maxAttempts} consecutive failed login attempts. A security alert with recovery instructions has been dispatched to your email.`,
+                `Account has been temporarily locked for ${lockoutHours} hours due to ${maxAttempts} consecutive failed password attempts. We have dispatched a security unlock link and instructions to your registered email address.`,
                 null,
                 {
                     isLocked: true,
@@ -183,6 +201,16 @@ const loginWithEmailAndPassword = async (req) => {
         await user.save();
     }
 
+    // Role enforcement
+    if (options.allowedRoles && options.allowedRoles.length > 0) {
+        if (!options.allowedRoles.includes(user.role)) {
+            throw new ApiError(
+                httpStatus.FORBIDDEN,
+                "Access denied. Only users with the Admin role are authorized to log in to this portal."
+            );
+        }
+    }
+
     // Step-up authentication: If 2FA is enabled, return 2FA challenge
     if (user.twoFactorEnabled) {
         const tempToken = jwt.sign(
@@ -197,17 +225,16 @@ const loginWithEmailAndPassword = async (req) => {
         };
     }
 
-    const tokenData = await user.generateAccessToken(req);
+    const tokens = await user.generateAuthTokens(req);
     return {
-        ...tokenData,
-        accessToken: tokenData.token,
+        ...tokens,
         user: {
             id: user._id,
             email: user.email,
             userName: user.userName,
-            role: user.role,
             fullName: user.fullName,
             fullNameString: user.fullNameString,
+            role: user.role,
         },
     };
 };
@@ -418,65 +445,6 @@ const unlockAccount = async (token) => {
 };
 
 /**
- * Refreshes an access token using a valid, active refresh token.
- * Validates signature against config.jwt.refreshSecret and verifies session in database.
- *
- * @param {string} refreshToken - The JWT refresh token
- * @param {Object} req - Express request
- * @returns {Promise<Object>} New access token, refresh token, and user metadata
- */
-const refreshAuthToken = async (refreshToken, req) => {
-    if (!refreshToken) {
-        throw new ApiError(httpStatus.BAD_REQUEST, "Refresh token is required.");
-    }
-
-    let decoded;
-    try {
-        decoded = jwt.verify(
-            refreshToken,
-            config.jwt.refreshSecret || config.jwt.secret
-        );
-    } catch (err) {
-        if (err.name === "TokenExpiredError") {
-            throw new ApiError(httpStatus.UNAUTHORIZED, "Refresh token has expired. Please log in again.");
-        }
-        throw new ApiError(httpStatus.UNAUTHORIZED, "Invalid refresh token.");
-    }
-
-    const user = await models.User.findById(decoded.id);
-    if (!user || user.deleted || user.status === constants.UserStatus.Inactive) {
-        throw new ApiError(httpStatus.UNAUTHORIZED, "User account is unavailable.");
-    }
-
-    // Verify session is active and not revoked
-    const activeSession = user.sessions?.find(
-        (s) => s.tokenId === decoded.jti && s.isActive && new Date(s.expiresAt) > new Date()
-    );
-
-    if (!activeSession) {
-        throw new ApiError(
-            httpStatus.UNAUTHORIZED,
-            "Session has been revoked or expired. Please sign in again."
-        );
-    }
-
-    // Revoke old session token and generate a fresh pair
-    await models.User.revokeSession(user._id, decoded.jti);
-    const tokenData = await user.generateAccessToken(req);
-
-    return {
-        ...tokenData,
-        accessToken: tokenData.token,
-        user: {
-            id: user._id,
-            email: user.email,
-            userName: user.userName,
-            role: user.role,
-        },
-    };
-};
-
-/**
  * Verifies a third-party social login token (Google / Facebook) and returns JWT tokens for the user.
  *
  * @param {string} provider - The provider ("google" | "facebook").
@@ -587,7 +555,7 @@ const verifySocialToken = async (provider, token, req) => {
         throw new ApiError(httpStatus.UNAUTHORIZED, "User account is inactive.");
     }
 
-    const authTokens = await user.generateAccessToken(req);
+    const authTokens = await user.generateAuthTokens(req);
     const chosenFields = {
         fullName: user.fullName,
         email: user.email,
@@ -635,29 +603,75 @@ const changeUserPassword = async (oldPassword, newPassword, userId) => {
 };
 
 /**
+ * Refreshes auth tokens using a valid refresh token.
+ * Implements token rotation by revoking the old session and generating a new token pair.
+ *
+ * @param {string} refreshToken - The refresh token provided in cookie or body.
+ * @param {Object} req - The express request object.
+ * @returns {Promise<Object>} - Resolves to the rotated access and refresh tokens.
+ */
+const refreshAuthTokens = async (refreshToken, req) => {
+    if (!refreshToken) {
+        throw new ApiError(httpStatus.UNAUTHORIZED, "Refresh token is required.");
+    }
+
+    // 1. Verify token signature and validate active session
+    const { user, decoded } = await models.User.verifyRefreshToken(refreshToken);
+
+    // 2. Revoke the old session (atomic rotation)
+    await models.User.revokeSession(user._id, decoded.jti);
+
+    // 3. Generate new token pair and record new active session
+    const newTokens = await user.generateAuthTokens(req);
+
+    return {
+        ...newTokens,
+        user: {
+            id: user._id,
+            email: user.email,
+            userName: user.userName,
+            fullName: user.fullName,
+            fullNameString: user.fullNameString,
+            role: user.role,
+        },
+    };
+};
+
+const refreshAuthToken = refreshAuthTokens;
+
+/**
  * Logs out a user by revoking the active session associated with the JWT.
  *
  * @param {string} userId - The user ID.
- * @param {string} token - The access token to revoke.
+ * @param {string} token - The access token or refresh token to revoke.
  */
 const logout = async (userId, token) => {
+    if (!token) return;
     try {
-        const decoded = jwt.verify(token, config.jwt.secret);
-        const tokenId = decoded.jti;
+        let tokenId = token;
+        try {
+            const decoded = jwt.decode(token);
+            if (decoded?.jti) {
+                tokenId = decoded.jti;
+            }
+        } catch (_) {}
 
-        const result = await models.User.revokeSession(userId, tokenId);
-        if (result.modifiedCount === 0) {
-            throw new ApiError(
-                httpStatus.BAD_REQUEST,
-                "Session not found or already revoked."
-            );
-        }
+        await models.User.revokeSession(userId, tokenId);
     } catch (error) {
         if (error instanceof jwt.JsonWebTokenError) {
             throw new ApiError(httpStatus.UNAUTHORIZED, "Invalid token.");
         }
         throw error;
     }
+};
+
+/**
+ * Logs out user from all devices by revoking all active sessions.
+ *
+ * @param {string} userId - The user ID.
+ */
+const logoutAll = async (userId) => {
+    await models.User.revokeAllSessions(userId);
 };
 
 /**
@@ -685,14 +699,18 @@ const generate2FA = async (userId) => {
 };
 
 /**
- * Verifies a 6-digit TOTP code, enables 2FA, and generates 8 one-time emergency backup recovery codes.
+ * Validates initial TOTP code to confirm activation and generates 8 recovery codes.
  */
 const enable2FA = async (userId, totpCode) => {
     const user = await models.User.findById(userId).select("+twoFactorSecret");
-    if (!user || !user.twoFactorSecret) {
+    if (!user) {
+        throw new ApiError(httpStatus.NOT_FOUND, "User not found.");
+    }
+
+    if (!user.twoFactorSecret) {
         throw new ApiError(
             httpStatus.BAD_REQUEST,
-            "2FA setup has not been initiated. Please generate a QR code first."
+            "2FA setup has not been initialized. Please call /2fa/generate first."
         );
     }
 
@@ -821,10 +839,9 @@ const verify2FALogin = async (tempToken, code, req) => {
         }
     }
 
-    const tokenData = await user.generateAccessToken(req);
+    const tokens = await user.generateAuthTokens(req);
     return {
-        ...tokenData,
-        accessToken: tokenData.token,
+        ...tokens,
         usedRecoveryCode,
         user: {
             id: user._id,
@@ -845,10 +862,12 @@ const authService = {
     requestUnlock,
     unlockAccount,
     refreshAuthToken,
+    refreshAuthTokens,
     verifySocialToken,
     registerUser,
     changeUserPassword,
     logout,
+    logoutAll,
     generate2FA,
     enable2FA,
     disable2FA,

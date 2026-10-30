@@ -7,12 +7,36 @@ import httpStatus from "http-status";
 import config from "../config/env.config.js";
 import { resolveClientAppUrl } from "../utils/urlHelper.js";
 
+const setAuthCookies = (res, tokens) => {
+    if (tokens.accessToken) {
+        res.cookie("accessToken", tokens.accessToken, {
+            ...config.jwt.cookieOptions,
+            maxAge: 15 * 60 * 1000,
+        });
+    }
+    if (tokens.refreshToken) {
+        res.cookie("refreshToken", tokens.refreshToken, {
+            ...config.jwt.cookieOptions,
+            maxAge: 7 * 24 * 60 * 60 * 1000,
+        });
+    }
+};
+
+const clearAuthCookies = (res) => {
+    res.clearCookie("accessToken", config.jwt.cookieOptions);
+    res.clearCookie("refreshToken", config.jwt.cookieOptions);
+};
+
 const register = asyncHandler(async (req, res) => {
     const userData = await services.authService.registerUser(req.body);
-    const authTokens = await userData.generateAccessToken(req);
+    const authTokens = await userData.generateAuthTokens(req);
+    setAuthCookies(res, authTokens);
+
     const chosenFields = {
+        id: userData._id,
         fullName: userData.fullName,
         email: userData.email,
+        userName: userData.userName,
         contactNumber: userData.contactNumber,
         role: userData.role,
         fullNameString: userData.fullNameString,
@@ -27,11 +51,27 @@ const register = asyncHandler(async (req, res) => {
 });
 
 const login = asyncHandler(async (req, res) => {
-    const token = await services.authService.loginWithEmailAndPassword(req);
+    const data = await services.authService.loginWithEmailAndPassword(req);
+    setAuthCookies(res, data);
+
     const response = new ApiResponse(
         httpStatus.OK,
-        token,
+        data,
         "Login successful."
+    );
+    res.status(httpStatus.OK).json(response);
+});
+
+const adminLogin = asyncHandler(async (req, res) => {
+    const data = await services.authService.loginWithEmailAndPassword(req, {
+        allowedRoles: [constants.UserRoles.ADMIN],
+    });
+    setAuthCookies(res, data);
+
+    const response = new ApiResponse(
+        httpStatus.OK,
+        data,
+        "Admin login successful."
     );
     res.status(httpStatus.OK).json(response);
 });
@@ -103,16 +143,24 @@ const unlockAccount = asyncHandler(async (req, res) => {
     }
 });
 
-const refreshToken = asyncHandler(async (req, res) => {
-    const token = req.body.refreshToken || req.cookies?.refreshToken;
-    const result = await services.authService.refreshAuthToken(token, req);
+const refreshTokens = asyncHandler(async (req, res) => {
+    const refreshToken = req.cookies?.refreshToken || req.body?.refreshToken;
+    if (!refreshToken) {
+        throw new ApiError(httpStatus.BAD_REQUEST, "Refresh token is required.");
+    }
+
+    const data = await services.authService.refreshAuthTokens(refreshToken, req);
+    setAuthCookies(res, data);
+
     const response = new ApiResponse(
         httpStatus.OK,
-        result,
-        "Access token refreshed successfully."
+        data,
+        "Tokens refreshed successfully."
     );
     res.status(httpStatus.OK).json(response);
 });
+
+const refreshToken = refreshTokens;
 
 const verifySocialToken = asyncHandler(async (req, res) => {
     const { provider, token } = req.body;
@@ -121,6 +169,8 @@ const verifySocialToken = asyncHandler(async (req, res) => {
         token,
         req
     );
+    setAuthCookies(res, data);
+
     const response = new ApiResponse(
         httpStatus.OK,
         data,
@@ -171,18 +221,31 @@ const getUserDetails = asyncHandler(async (req, res) => {
 
 const logout = asyncHandler(async (req, res) => {
     const authHeader = req.headers["authorization"];
-    const token = authHeader && authHeader.split(" ")[1];
+    const token = (authHeader && authHeader.split(" ")[1]) || req.cookies?.accessToken || req.cookies?.refreshToken;
 
-    if (!token) {
-        throw new ApiError(httpStatus.BAD_REQUEST, "Authorization token is required.");
+    if (req.user?._id) {
+        await services.authService.logout(req.user._id, token);
     }
-
-    await services.authService.logout(req.user._id, token);
+    clearAuthCookies(res);
 
     const response = new ApiResponse(
         httpStatus.OK,
         null,
         "Logged out successfully."
+    );
+    res.status(httpStatus.OK).json(response);
+});
+
+const logoutAll = asyncHandler(async (req, res) => {
+    if (req.user?._id) {
+        await services.authService.logoutAll(req.user._id);
+    }
+    clearAuthCookies(res);
+
+    const response = new ApiResponse(
+        httpStatus.OK,
+        null,
+        "Logged out from all devices successfully."
     );
     res.status(httpStatus.OK).json(response);
 });
@@ -222,6 +285,8 @@ const disable2FA = asyncHandler(async (req, res) => {
 const verify2FALogin = asyncHandler(async (req, res) => {
     const { tempToken, code } = req.body;
     const data = await services.authService.verify2FALogin(tempToken, code, req);
+    setAuthCookies(res, data);
+
     const response = new ApiResponse(
         httpStatus.OK,
         data,
@@ -233,17 +298,20 @@ const verify2FALogin = asyncHandler(async (req, res) => {
 const authController = {
     register,
     login,
+    adminLogin,
     forgotPassword,
     resetPassword,
     requestUnlock,
     unlockAccount,
     refreshToken,
+    refreshTokens,
     verifySocialToken,
     changePassword,
     isAdmin,
     verifyUser,
     getUserDetails,
     logout,
+    logoutAll,
     generate2FA,
     enable2FA,
     disable2FA,

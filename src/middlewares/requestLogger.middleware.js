@@ -4,6 +4,7 @@ import RequestLog from "./../models/requestLogs.model.js";
 import config from "../config/env.config.js";
 import getIpDetails from "../utils/getIpDetails.js";
 import { recordRequestStart, recordRequestFinish } from "../sockets/socket.js";
+import { secureSanitize } from "../utils/crypto.util.js";
 
 const requestLoggerMiddleware = async (req, res, next) => {
     // Ignore internal socket.io polling packets to prevent feedback loops
@@ -78,8 +79,80 @@ const requestLoggerMiddleware = async (req, res, next) => {
             userId,
         });
 
-        // Persist into MongoDB RequestLog collection
+        // Persist into MongoDB RequestLog collection with confidential fields securely encrypted
         try {
+            const encryptionKey = config.logEncryptionKey;
+            const sanitizedHeaders = secureSanitize(req.headers, { key: encryptionKey });
+            const sanitizedBody = secureSanitize(req.body, { key: encryptionKey });
+            
+            // Prevent recursive log-query explosion: Omit bulk log arrays from responseBody
+            let sanitizedResponse;
+            const url = req.originalUrl || "";
+
+            if (url.includes("/api/logs/db-request-logs")) {
+                sanitizedResponse = {
+                    _omitted: true,
+                    description: "Response logs omitted from RequestLog to prevent recursive bloat",
+                    logCount: responseData?.data?.logs?.length || 0,
+                    logIds: (responseData?.data?.logs || []).map((l) => l._id),
+                    pagination: responseData?.data?.pagination,
+                    statusCode: responseData?.statusCode,
+                    message: responseData?.message,
+                };
+            } else if (url.includes("/api/logs/decrypt-field")) {
+                sanitizedResponse = {
+                    _omitted: true,
+                    description: "Decrypted payload omitted from RequestLog to prevent recursion",
+                    fieldsCount: responseData?.data?.fieldsCount || 0,
+                    fields: responseData?.data?.fields?.slice(0, 15),
+                    auditLogId: responseData?.data?.auditLogId,
+                    message: responseData?.message,
+                };
+            } else if (url.includes("/api/logs/db-audit-logs") || url.includes("/api/logs/decryption-audits")) {
+                sanitizedResponse = {
+                    _omitted: true,
+                    description: "Audit trail results omitted from RequestLog to prevent recursive bloat",
+                    count: responseData?.data?.audits?.length || 0,
+                    auditIds: (responseData?.data?.audits || []).map((a) => a._id),
+                    pagination: responseData?.data?.pagination,
+                    statusCode: responseData?.statusCode,
+                    message: responseData?.message,
+                };
+            } else {
+                sanitizedResponse = secureSanitize(responseData, { key: encryptionKey });
+            }
+
+            // Universal Size Guard: Ensure no single log's responseBody or requestBody exceeds 50 KB
+            const MAX_LOG_PAYLOAD_SIZE = 50 * 1024; // 50 KB
+
+            let finalResponseBody = sanitizedResponse;
+            try {
+                const resStr = JSON.stringify(sanitizedResponse);
+                if (resStr && resStr.length > MAX_LOG_PAYLOAD_SIZE) {
+                    finalResponseBody = {
+                        _truncated: true,
+                        description: `Response body truncated (${(resStr.length / 1024).toFixed(1)} KB exceeds 50 KB limit)`,
+                        statusCode: responseData?.statusCode,
+                        message: responseData?.message,
+                    };
+                }
+            } catch (e) {
+                finalResponseBody = "[Unserializable Response]";
+            }
+
+            let finalRequestBody = sanitizedBody;
+            try {
+                const reqStr = JSON.stringify(sanitizedBody);
+                if (reqStr && reqStr.length > MAX_LOG_PAYLOAD_SIZE) {
+                    finalRequestBody = {
+                        _truncated: true,
+                        description: `Request body truncated (${(reqStr.length / 1024).toFixed(1)} KB exceeds 50 KB limit)`,
+                    };
+                }
+            } catch (e) {
+                finalRequestBody = "[Unserializable Request Body]";
+            }
+
             const logEntry = new RequestLog({
                 requestType: req.headers["content-type"] || "Unknown",
                 requestStatus: isError ? "Failed" : "Successful",
@@ -88,10 +161,10 @@ const requestLoggerMiddleware = async (req, res, next) => {
                 origin: req.headers.origin || "Unknown",
                 requestMethod: req.method,
                 requestUrl: req.originalUrl,
-                requestHeaders: req.headers,
-                requestBody: req.body,
+                requestHeaders: sanitizedHeaders,
+                requestBody: finalRequestBody,
                 responseStatus: statusCode,
-                responseBody: responseData,
+                responseBody: finalResponseBody,
                 user: userId,
                 createdAt: new Date(),
             });

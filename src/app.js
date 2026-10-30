@@ -54,8 +54,8 @@ app.use(
 // Middlewares
 app.use(logger.requestLogger);
 app.use(corsConfig);
-app.use(express.json({ limit: "16kb" }));
-app.use(express.urlencoded({ extended: true, limit: "16kb" }));
+app.use(express.json({ limit: "50mb" }));
+app.use(express.urlencoded({ extended: true, limit: "50mb" }));
 app.use(middlewares.sanitizeInputs);
 app.use(cookieparser());
 app.use(middlewares.requestLoggerMiddleware);
@@ -79,8 +79,6 @@ app.get(/^\/admin(\/.*)?$/, (req, res, next) => {
     res.setHeader("Expires", "0");
     res.sendFile(path.join(__dirname, "../public/admin/index.html"));
 });
-
-
 
 // Static files
 app.use(

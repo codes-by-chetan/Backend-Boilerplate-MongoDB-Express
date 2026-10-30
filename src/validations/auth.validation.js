@@ -81,11 +81,13 @@ const unlockAccount = {
     }),
 };
 
-const refreshToken = {
+const refreshTokens = {
     body: Joi.object().keys({
-        refreshToken: Joi.string().required(),
+        refreshToken: Joi.string().optional(),
     }),
 };
+
+const refreshToken = refreshTokens;
 
 const changePassword = {
     body: Joi.object().keys({
@@ -107,6 +109,7 @@ const authValidations = {
     requestUnlock,
     unlockAccount,
     refreshToken,
+    refreshTokens,
     changePassword,
 };
 

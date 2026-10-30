@@ -31,6 +31,10 @@ const envVarSchema = joi
             .string()
             .default("7d")
             .description("Refresh token expiry time"),
+        LOG_ENCRYPTION_KEY: joi
+            .string()
+            .default("e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855")
+            .description("AES-256-GCM secret key for encrypting sensitive request log payloads"),
 
         // Cookies
         COOKIE_SECRET: joi.string().default("cookie_secret_key").description("Cookie secret"),
@@ -111,9 +115,15 @@ const config = {
     },
     jwt: {
         secret: envVars.ACCESS_TOKEN_SECRET_KEY,
-        expiry: envVars.ACCESS_TOKEN_EXPIRY,
+        expiry: envVars.ACCESS_TOKEN_EXPIRY || "15m",
         refreshSecret: envVars.REFRESH_TOKEN_SECRET_KEY || envVars.ACCESS_TOKEN_SECRET_KEY,
-        refreshExpiry: envVars.REFRESH_TOKEN_EXPIRY,
+        refreshExpiry: envVars.REFRESH_TOKEN_EXPIRY || "7d",
+        cookieOptions: {
+            httpOnly: true,
+            secure: envVars.COOKIE_SECURE !== undefined ? envVars.COOKIE_SECURE : envVars.NODE_ENV === "production",
+            sameSite: envVars.COOKIE_SAME_SITE || (envVars.NODE_ENV === "production" ? "none" : "lax"),
+            path: "/",
+        },
     },
     cookies: {
         secret: envVars.COOKIE_SECRET,
@@ -151,6 +161,7 @@ const config = {
     geolocation: {
         ipinfoToken: envVars.IPINFO_API_TOKEN,
     },
+    logEncryptionKey: envVars.LOG_ENCRYPTION_KEY || "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
     cloudinary: {
         cloudName: envVars.CLOUDINARY_CLOUD_NAME,
         apiKey: envVars.CLOUDINARY_API_KEY,

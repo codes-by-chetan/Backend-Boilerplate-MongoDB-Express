@@ -12,6 +12,7 @@ import reusableSchemas from "./reusableSchemas/index.js";
 import { v4 as uuidv4 } from "uuid";
 import { UAParser } from "ua-parser-js";
 import getIpDetails from "../utils/getIpDetails.js";
+import { isBcryptHash } from "../utils/diff.util.js";
 
 const fullNameSchema = new mongoose.Schema({
     firstName: {
@@ -32,6 +33,10 @@ const sessionSchema = new mongoose.Schema({
     tokenId: {
         type: String,
         required: [true, "Token ID is required"],
+    },
+    refreshToken: {
+        type: String,
+        required: false,
     },
     deviceInfo: {
         browser: { type: String, trim: true },
@@ -267,19 +272,17 @@ userSchema.methods.unlockAccount = async function () {
     return this.save();
 };
 
-// Generate access & refresh tokens and persist session
-userSchema.methods.generateAccessToken = async function (req) {
+// Generate Access & Refresh token pair and persist session
+userSchema.methods.generateAuthTokens = async function (req) {
     const tokenId = uuidv4();
 
-    // Short-lived access token expiration (e.g. 15m)
-    const accessExpirySecs = parseDurationSeconds(config.jwt.expiry, 15 * 60);
-    const accessExpiresAt = moment().add(accessExpirySecs, "seconds").toDate();
+    const accessExpirySeconds = parseDurationSeconds(config.jwt.expiry, 900); // 15m default
+    const refreshExpirySeconds = parseDurationSeconds(config.jwt.refreshExpiry, 7 * 86400); // 7d default
 
-    // Long-lived session / refresh token expiration (e.g. 7d)
-    const refreshExpirySecs = parseDurationSeconds(config.jwt.refreshExpiry, 7 * 86400);
-    const sessionExpiresAt = moment().add(refreshExpirySecs, "seconds").toDate();
+    const accessTokenExpiresAt = moment().add(accessExpirySeconds, "seconds").toDate();
+    const refreshTokenExpiresAt = moment().add(refreshExpirySeconds, "seconds").toDate();
 
-    const token = jwt.sign(
+    const accessToken = jwt.sign(
         {
             id: this._id,
             userName: this.userName,
@@ -287,9 +290,10 @@ userSchema.methods.generateAccessToken = async function (req) {
             fullName: this.fullName,
             role: this.role,
             jti: tokenId,
+            type: "access",
         },
         config.jwt.secret,
-        { expiresIn: config.jwt.expiry }
+        { expiresIn: config.jwt.expiry || "15m" }
     );
 
     const refreshToken = jwt.sign(
@@ -303,24 +307,27 @@ userSchema.methods.generateAccessToken = async function (req) {
     );
 
     let deviceInfo = {};
-    try {
-        const parser = new UAParser(req.headers["user-agent"] || "");
-        const ua = parser.getResult();
-        deviceInfo = {
-            browser: ua.browser.name,
-            os: ua.os.name,
-            device: ua.device.type || "desktop",
-        };
-    } catch (error) {
-        console.error("Failed to parse User-Agent:", error);
+    if (req?.headers) {
+        try {
+            const parser = new UAParser(req.headers["user-agent"] || "");
+            const ua = parser.getResult();
+            deviceInfo = {
+                browser: ua.browser.name,
+                os: ua.os.name,
+                device: ua.device.type || "desktop",
+            };
+        } catch (error) {
+            console.error("Failed to parse User-Agent:", error);
+        }
     }
 
     const session = {
         tokenId,
+        refreshToken,
         deviceInfo,
-        ipAddress: getIpDetails(req).clientIp,
+        ipAddress: req ? getIpDetails(req).clientIp : null,
         loginAt: new Date(),
-        expiresAt: sessionExpiresAt,
+        expiresAt: refreshTokenExpiresAt,
         isActive: true,
     };
 
@@ -328,19 +335,79 @@ userSchema.methods.generateAccessToken = async function (req) {
     await this.save();
 
     return {
-        token,
-        accessToken: token,
+        accessToken,
         refreshToken,
-        expiryTime: accessExpiresAt.toISOString(),
-        refreshExpiryTime: sessionExpiresAt.toISOString(),
+        token: accessToken, // backwards compatibility
+        expiryTime: accessTokenExpiresAt.toISOString(),
+        accessTokenExpiryTime: accessTokenExpiresAt.toISOString(),
+        refreshExpiryTime: refreshTokenExpiresAt.toISOString(),
+        refreshTokenExpiryTime: refreshTokenExpiresAt.toISOString(),
     };
 };
 
+// Backwards compatibility for generateAccessToken
+userSchema.methods.generateAccessToken = async function (req) {
+    return this.generateAuthTokens(req);
+};
+
+// Verify refresh token and validate against active sessions
+userSchema.statics.verifyRefreshToken = async function (refreshToken) {
+    let decoded;
+    try {
+        decoded = jwt.verify(refreshToken, config.jwt.refreshSecret || config.jwt.secret);
+    } catch (err) {
+        if (err.message === "jwt expired" || err.name === "TokenExpiredError") {
+            throw new ApiError(httpStatus.UNAUTHORIZED, "Refresh token expired. Please log in again.");
+        }
+        throw new ApiError(httpStatus.UNAUTHORIZED, "Invalid refresh token.");
+    }
+
+    if (decoded.type && decoded.type !== "refresh") {
+        throw new ApiError(httpStatus.UNAUTHORIZED, "Invalid token type for refresh.");
+    }
+
+    const user = await this.findById(decoded.id);
+    if (!user) {
+        throw new ApiError(httpStatus.NOT_FOUND, "User not found.");
+    }
+    if (user.status === constants.UserStatus.Inactive) {
+        throw new ApiError(httpStatus.FORBIDDEN, "User account is inactive.");
+    }
+    if (user.deleted) {
+        throw new ApiError(httpStatus.FORBIDDEN, "User account has been deleted.");
+    }
+
+    // Find the matching active session
+    const session = user.sessions.find(
+        (s) => (s.tokenId === decoded.jti || s.refreshToken === refreshToken) && s.isActive && s.expiresAt > new Date()
+    );
+
+    if (!session) {
+        throw new ApiError(httpStatus.UNAUTHORIZED, "Session expired or revoked. Please log in again.");
+    }
+
+    return { user, session, decoded };
+};
+
 // Revoke a session
-userSchema.statics.revokeSession = async function (userId, tokenId) {
+userSchema.statics.revokeSession = async function (userId, tokenIdOrToken) {
     return this.updateOne(
         { _id: userId },
-        { $pull: { sessions: { tokenId, isActive: true } } }
+        {
+            $pull: {
+                sessions: {
+                    $or: [{ tokenId: tokenIdOrToken }, { refreshToken: tokenIdOrToken }],
+                },
+            },
+        }
+    );
+};
+
+// Revoke all sessions for a user
+userSchema.statics.revokeAllSessions = async function (userId) {
+    return this.updateOne(
+        { _id: userId },
+        { $set: { sessions: [] } }
     );
 };
 
@@ -365,7 +432,7 @@ userSchema.pre(/^find/, async function () {
 
 // Pre-save hook for registration token
 userSchema.pre("save", function () {
-    if (this._isRollbackOperation || !this.isNew) {
+    if (this._isRollbackOperation || this.$locals?.isRollback || !this.isNew) {
         return;
     }
     const token = jwt.sign(
@@ -383,19 +450,21 @@ userSchema.pre("save", function () {
 // Pre-save hook for password hashing
 userSchema.pre("save", function () {
     // 1. Bypass completely if this save is an explicit rollback / restore operation
-    if (this._isRollbackOperation) return;
+    if (this._isRollbackOperation || this.$locals?.isRollback) return;
 
     if (!this.isModified("password") || !this.password) return;
 
     // 2. Prevent double-hashing if password is already a valid bcrypt hash ($2a$, $2b$, $2y$)
-    if (/^\$2[aby]\$\d{2}\$[./A-Za-z0-9]{53}$/.test(this.password)) {
+    if (isBcryptHash(this.password)) {
         return;
     }
 
     this.password = bcrypt.hashSync(this.password, 10);
 });
 
-userSchema.plugin(plugins.versioning);
+userSchema.plugin(plugins.versioning, {
+    excludeFieldsOnRollback: ["password", "registrationToken"],
+});
 
 const User = mongoose.model("User", userSchema);
 export default User;

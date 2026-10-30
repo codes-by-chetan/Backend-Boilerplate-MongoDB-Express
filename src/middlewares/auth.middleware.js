@@ -14,7 +14,10 @@ import constants from "../constants/index.js";
  */
 const authMiddleware = asyncHandler(async (req, res, next) => {
     const authHeader = req.headers["authorization"];
-    const token = authHeader && authHeader.split(" ")[1];
+    const bearerToken = authHeader && authHeader.startsWith("Bearer ")
+        ? authHeader.split(" ")[1]
+        : (authHeader && authHeader.split(" ")[1]);
+    const token = req.cookies?.accessToken || bearerToken;
 
     if (!token) {
         throw new ApiError(httpStatus.UNAUTHORIZED, "Access token is missing or invalid");
@@ -24,10 +27,10 @@ const authMiddleware = asyncHandler(async (req, res, next) => {
     try {
         decoded = jwt.verify(token, config.jwt.secret);
     } catch (err) {
-        if (err.message === "jwt expired") {
-            throw new ApiError(httpStatus.UNAUTHORIZED, "Session expired");
+        if (err.name === "TokenExpiredError" || err.message === "jwt expired") {
+            throw new ApiError(httpStatus.UNAUTHORIZED, "Access token expired");
         }
-        throw new ApiError(httpStatus.UNAUTHORIZED, "Invalid token");
+        throw new ApiError(httpStatus.UNAUTHORIZED, "Invalid access token");
     }
 
     const user = await models.User.findById(decoded?.id);
