@@ -3,10 +3,11 @@ import logger from "../config/logger.config.js";
 const errorResponseGenerator = (err) => {
     let error = { ...err };
     error.message = err.message;
+    error.data = err.data || null;
 
     let response = new ApiResponse(
         error.statusCode,
-        null,
+        error.data,
         error.message,
         error.redirect || null
     );
@@ -78,6 +79,11 @@ const errorHandler = (error, req, res, next) => {
     error.status = error.status || "error";
     logger.logMessage("error", error.message);
     console.error(error);
+
+    const retryAfter = error.data?.retryAfter || error.retryAfter || error.data?.cooldownSeconds;
+    if (retryAfter) {
+        res.setHeader("Retry-After", retryAfter);
+    }
 
     const response = errorResponseGenerator(error);
     res.status(error.statusCode).json(response);

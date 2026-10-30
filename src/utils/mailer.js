@@ -1,4 +1,4 @@
-import { transporter } from "../index.js";
+import { getTransporter } from "../config/mailer.config.js";
 import config from "../config/env.config.js";
 import logger from "../config/logger.config.js";
 
@@ -12,6 +12,7 @@ import logger from "../config/logger.config.js";
  * @param {string} [recipientEmail]
  */
 async function sendTestMail(data, recipientEmail) {
+    const transporter = getTransporter();
     const to = recipientEmail || config.email.id;
     if (!to || !transporter) return;
 
@@ -64,6 +65,7 @@ async function sendTestMail(data, recipientEmail) {
  * @param {Object} mailOptions
  */
 async function sendMail(mailOptions) {
+    const transporter = getTransporter();
     if (!transporter) return;
     try {
         const info = await transporter.sendMail(mailOptions);

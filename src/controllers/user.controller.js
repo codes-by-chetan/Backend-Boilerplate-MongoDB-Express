@@ -53,12 +53,35 @@ const updateUserProfile = asyncHandler(async (req, res) => {
     return res.status(httpStatus.OK).json(response);
 });
 
+const adminUnlockUser = asyncHandler(async (req, res) => {
+    const identifier = req.body.identifier || req.body.email || req.body.userId || req.params.userId;
+    const result = await services.userService.adminUnlockUser(identifier);
+    const response = new ApiResponse(
+        httpStatus.OK,
+        result.user,
+        result.message
+    );
+    return res.status(httpStatus.OK).json(response);
+});
+
+const getLockedUsers = asyncHandler(async (req, res) => {
+    const lockedUsers = await services.userService.getLockedUsers();
+    const response = new ApiResponse(
+        httpStatus.OK,
+        lockedUsers,
+        "Locked user accounts fetched successfully."
+    );
+    return res.status(httpStatus.OK).json(response);
+});
+
 const userController = {
     getUserProfile,
     getUserFullProfile,
     getUserFullProfileById,
     updateUserAvatar,
     updateUserProfile,
+    adminUnlockUser,
+    getLockedUsers,
 };
 
 export default userController;

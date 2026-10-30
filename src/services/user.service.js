@@ -191,6 +191,65 @@ const getUserProfileDetails = async (user) => {
     };
 };
 
+/**
+ * Unlocks a user account by admin intervention.
+ *
+ * @param {string} identifier - User ID or Email address
+ * @returns {Promise<Object>} Unlocked user info
+ */
+const adminUnlockUser = async (identifier) => {
+    if (!identifier) {
+        throw new ApiError(httpStatus.BAD_REQUEST, "User ID or Email is required to unlock account.");
+    }
+
+    const query = identifier.includes("@")
+        ? { email: identifier.toLowerCase().trim(), deleted: { $ne: true } }
+        : { _id: identifier, deleted: { $ne: true } };
+
+    const user = await models.User.findOne(query);
+    if (!user) {
+        throw new ApiError(httpStatus.NOT_FOUND, "User not found.");
+    }
+
+    await user.unlockAccount();
+
+    return {
+        message: `Account for ${user.email} has been successfully unlocked by Administrator.`,
+        user: {
+            id: user._id,
+            email: user.email,
+            userName: user.userName,
+            status: user.status,
+            isLocked: false,
+        },
+    };
+};
+
+/**
+ * Lists all user accounts that are currently locked by brute-force protection.
+ *
+ * @returns {Promise<Array>} List of locked users
+ */
+const getLockedUsers = async () => {
+    const lockedUsers = await models.User.find({
+        lockUntil: { $gt: new Date() },
+        deleted: { $ne: true },
+    }).select("fullName email userName failedLoginAttempts lockUntil lastFailedLoginAt lastFailedLoginIp");
+
+    return lockedUsers.map((u) => ({
+        id: u._id,
+        fullName: u.fullName,
+        fullNameString: u.fullNameString,
+        email: u.email,
+        userName: u.userName,
+        failedLoginAttempts: u.failedLoginAttempts,
+        lockUntil: u.lockUntil,
+        lastFailedLoginAt: u.lastFailedLoginAt,
+        lastFailedLoginIp: u.lastFailedLoginIp,
+        remainingMinutes: Math.max(1, Math.ceil((new Date(u.lockUntil).getTime() - Date.now()) / (1000 * 60))),
+    }));
+};
+
 const userService = {
     createUser,
     findOneUser,
@@ -199,6 +258,8 @@ const userService = {
     getUserProfile,
     getUserDetails,
     getUserProfileDetails,
+    adminUnlockUser,
+    getLockedUsers,
 };
 
 export default userService;

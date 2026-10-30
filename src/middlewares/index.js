@@ -5,6 +5,14 @@ import { upload } from "./multer.middleware.js";
 import requestLoggerMiddleware from "./requestLogger.middleware.js";
 import userMiddleware from "./user.middleware.js";
 import validate from "./validate.js";
+import authRateLimiter, {
+    loginLimiter,
+    registerLimiter,
+    forgotPasswordLimiter,
+    unlockLimiter,
+    resetPasswordLimiter,
+} from "./authRateLimiter.middleware.js";
+import sanitizeInputs from "./sanitize.middleware.js";
 
 const middlewares = {
     dbLogger,
@@ -15,6 +23,15 @@ const middlewares = {
     validate,
     upload,
     userMiddleware,
+    authRateLimiter,
+    sanitizeInputs,
+    rateLimiters: {
+        login: loginLimiter,
+        register: registerLimiter,
+        forgotPassword: forgotPasswordLimiter,
+        unlock: unlockLimiter,
+        resetPassword: resetPasswordLimiter,
+    },
 };
 
 export {
@@ -26,6 +43,13 @@ export {
     userMiddleware,
     validate,
     upload,
+    authRateLimiter,
+    sanitizeInputs,
+    loginLimiter,
+    registerLimiter,
+    forgotPasswordLimiter,
+    unlockLimiter,
+    resetPasswordLimiter,
 };
 
 export default middlewares;

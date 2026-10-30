@@ -18,10 +18,22 @@ export function setOnUnauthorized(cb) {
   onUnauthorizedCallback = cb;
 }
 
+export function getBrowserClientInfo() {
+  if (typeof window === "undefined") return { clientOrigin: "", clientUrl: "" };
+  const origin = window.location.origin;
+  return {
+    clientOrigin: origin,
+    clientUrl: `${origin}/admin`,
+  };
+}
+
 export async function apiFetch(endpoint, options = {}) {
   const token = getToken();
+  const clientInfo = getBrowserClientInfo();
   const headers = {
     "Content-Type": "application/json",
+    ...(clientInfo.clientOrigin ? { "X-Client-Origin": clientInfo.clientOrigin } : {}),
+    ...(clientInfo.clientUrl ? { "X-Client-Url": clientInfo.clientUrl } : {}),
     ...(options.headers || {}),
   };
 
@@ -96,15 +108,116 @@ export const api = {
   getRawLogsByDate: (date) => apiFetchText(`/api/logs/by-date/${encodeURIComponent(date)}`),
   getRawRecentLogs: () => apiFetchText("/api/logs/recents"),
   login: async (email, password) => {
+    const clientInfo = getBrowserClientInfo();
     const res = await fetch("/api/auth/login", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, password }),
+      headers: {
+        "Content-Type": "application/json",
+        "X-Client-Origin": clientInfo.clientOrigin,
+        "X-Client-Url": clientInfo.clientUrl,
+      },
+      body: JSON.stringify({ email, password, ...clientInfo }),
     });
     const data = await res.json();
-    if (!res.ok) throw new Error(data?.message || "Login failed");
+    if (!res.ok) {
+      const error = new Error(data?.message || "Login failed");
+      error.status = res.status;
+      error.data = data?.data;
+      throw error;
+    }
     return data;
   },
+
+  requestUnlock: async (email) => {
+    const clientInfo = getBrowserClientInfo();
+    const res = await fetch("/api/auth/request-unlock", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Client-Origin": clientInfo.clientOrigin,
+        "X-Client-Url": clientInfo.clientUrl,
+      },
+      body: JSON.stringify({ email, ...clientInfo }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      const error = new Error(data?.message || "Failed to request unlock link");
+      error.status = res.status;
+      error.data = data?.data;
+      throw error;
+    }
+    return data;
+  },
+
+  unlockAccount: async (token) => {
+    const clientInfo = getBrowserClientInfo();
+    const res = await fetch("/api/auth/unlock-account", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Client-Origin": clientInfo.clientOrigin,
+        "X-Client-Url": clientInfo.clientUrl,
+      },
+      body: JSON.stringify({ token, ...clientInfo }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      const error = new Error(data?.message || "Invalid or expired unlock token");
+      error.status = res.status;
+      error.data = data?.data;
+      throw error;
+    }
+    return data;
+  },
+
+  forgotPassword: async (email) => {
+    const clientInfo = getBrowserClientInfo();
+    const res = await fetch("/api/auth/forgot-password", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Client-Origin": clientInfo.clientOrigin,
+        "X-Client-Url": clientInfo.clientUrl,
+      },
+      body: JSON.stringify({ email, ...clientInfo }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      const error = new Error(data?.message || "Failed to dispatch password reset link");
+      error.status = res.status;
+      error.data = data?.data;
+      throw error;
+    }
+    return data;
+  },
+
+  resetPassword: async (token, newPassword) => {
+    const clientInfo = getBrowserClientInfo();
+    const res = await fetch("/api/auth/reset-password", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Client-Origin": clientInfo.clientOrigin,
+        "X-Client-Url": clientInfo.clientUrl,
+      },
+      body: JSON.stringify({ token, newPassword, ...clientInfo }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      const error = new Error(data?.message || "Failed to reset password");
+      error.status = res.status;
+      error.data = data?.data;
+      throw error;
+    }
+    return data;
+  },
+
+  getLockedUsers: () => apiFetch("/api/user/admin/locked-users"),
+  adminUnlockUser: (identifier) =>
+    apiFetch("/api/user/admin/unlock", {
+      method: "POST",
+      body: JSON.stringify({ identifier }),
+    }),
 
   getSystemStats: () => apiFetch("/api/logs/system-stats"),
 
@@ -143,5 +256,13 @@ export const api = {
     apiFetch(`/api/logs/document-rollback/${modelName}/${docId}`, {
       method: "POST",
       body: JSON.stringify({ targetVersion: Number(version), version: Number(version) }),
+    }),
+
+  // Admin Security & Threat Operations
+  getLockedUsers: () => apiFetch("/api/user/admin/locked-users"),
+
+  adminUnlockUser: (userId) =>
+    apiFetch(`/api/user/admin/unlock/${userId}`, {
+      method: "POST",
     }),
 };

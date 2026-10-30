@@ -7,7 +7,6 @@ import constants from "../constants/index.js";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import config from "../config/env.config.js";
-import middlewares from "../middlewares/index.js";
 import moment from "moment";
 import reusableSchemas from "./reusableSchemas/index.js";
 import { v4 as uuidv4 } from "uuid";
@@ -132,6 +131,73 @@ const userSchema = new mongoose.Schema(
             index: true,
         },
         sessions: { type: [sessionSchema], required: false },
+
+        // Threat mitigation & Brute-force Lockout tracking
+        failedLoginAttempts: {
+            type: Number,
+            default: 0,
+            index: true,
+        },
+        lockUntil: {
+            type: Date,
+            default: null,
+            index: true,
+        },
+        lastFailedLoginAt: {
+            type: Date,
+            default: null,
+        },
+        lastFailedLoginIp: {
+            type: String,
+            default: null,
+        },
+
+        // Self-service account unlock token
+        unlockAccountToken: {
+            type: String,
+            default: null,
+            index: true,
+        },
+        unlockAccountTokenExpiresAt: {
+            type: Date,
+            default: null,
+        },
+        lastUnlockEmailSentAt: {
+            type: Date,
+            default: null,
+        },
+
+        // Password reset token
+        passwordResetToken: {
+            type: String,
+            default: null,
+            index: true,
+        },
+        passwordResetTokenExpiresAt: {
+            type: Date,
+            default: null,
+        },
+        lastPasswordResetEmailSentAt: {
+            type: Date,
+            default: null,
+        },
+
+        // Two-Factor Authentication (2FA / TOTP)
+        twoFactorEnabled: {
+            type: Boolean,
+            default: false,
+        },
+        twoFactorSecret: {
+            type: String,
+            select: false,
+            default: null,
+        },
+        twoFactorRecoveryCodes: [
+            {
+                code: { type: String, required: true },
+                used: { type: Boolean, default: false },
+            },
+        ],
     },
     {
         timestamps: true,
@@ -148,8 +214,20 @@ userSchema.virtual("fullNameString").get(function () {
 userSchema.plugin(plugins.paginate);
 userSchema.plugin(plugins.privatePlugin);
 
-// Indexes for performance
-// userSchema.index({ "sessions.tokenId": 1 }, { unique: true, sparse: true });
+// Helper to parse human-readable durations like '15m', '2d', '7d', or numeric seconds
+const parseDurationSeconds = (durationStr, defaultSecs = 900) => {
+    if (!durationStr) return defaultSecs;
+    if (typeof durationStr === "number") return durationStr;
+    const match = durationStr.toString().trim().match(/^(\d+)([smhd])$/i);
+    if (!match) return defaultSecs;
+    const value = parseInt(match[1], 10);
+    const unit = match[2].toLowerCase();
+    if (unit === "s") return value;
+    if (unit === "m") return value * 60;
+    if (unit === "h") return value * 3600;
+    if (unit === "d") return value * 86400;
+    return defaultSecs;
+};
 
 // Check if email is taken
 userSchema.statics.isEmailTaken = async function (email, excludeUserId) {
@@ -174,33 +252,32 @@ userSchema.methods.isPasswordCorrect = async function (password) {
     return await bcrypt.compare(password, this.password);
 };
 
-// Generate access token and add session
+// Check if user account is currently locked
+userSchema.methods.isLocked = function () {
+    return Boolean(this.lockUntil && new Date(this.lockUntil).getTime() > Date.now());
+};
+
+// Self-service account unlock helper
+userSchema.methods.unlockAccount = async function () {
+    this.failedLoginAttempts = 0;
+    this.lockUntil = null;
+    this.unlockAccountToken = null;
+    this.unlockAccountTokenExpiresAt = null;
+    this.lastUnlockEmailSentAt = null;
+    return this.save();
+};
+
+// Generate access & refresh tokens and persist session
 userSchema.methods.generateAccessToken = async function (req) {
     const tokenId = uuidv4();
 
-    // Parse config.jwt.expiry (e.g., "2D" or numeric seconds)
-    let expirySeconds;
-    if (typeof config.jwt.expiry === "string") {
-        console.log("expiry data: ", config.jwt.expiry);
+    // Short-lived access token expiration (e.g. 15m)
+    const accessExpirySecs = parseDurationSeconds(config.jwt.expiry, 15 * 60);
+    const accessExpiresAt = moment().add(accessExpirySecs, "seconds").toDate();
 
-        const match = config.jwt.expiry.match(/^(\d+)([dhm])$/); // Matches "2D", "1H", "30M"
-        if (!match) {
-            throw new Error(
-                "Invalid JWT expiry format. Use number or format like '2D', '1H', '30M'"
-            );
-        }
-        const value = parseInt(match[1], 10);
-        const unit = match[2];
-        if (unit === "d")
-            expirySeconds = value * 24 * 60 * 60; // Days to seconds
-        else if (unit === "h")
-            expirySeconds = value * 60 * 60; // Hours to seconds
-        else if (unit === "m") expirySeconds = value * 60; // Minutes to seconds
-    } else {
-        expirySeconds = config.jwt.expiry; // Assume numeric seconds
-    }
-
-    const expiresAt = moment().add(expirySeconds, "seconds").toDate();
+    // Long-lived session / refresh token expiration (e.g. 7d)
+    const refreshExpirySecs = parseDurationSeconds(config.jwt.refreshExpiry, 7 * 86400);
+    const sessionExpiresAt = moment().add(refreshExpirySecs, "seconds").toDate();
 
     const token = jwt.sign(
         {
@@ -213,6 +290,16 @@ userSchema.methods.generateAccessToken = async function (req) {
         },
         config.jwt.secret,
         { expiresIn: config.jwt.expiry }
+    );
+
+    const refreshToken = jwt.sign(
+        {
+            id: this._id,
+            jti: tokenId,
+            type: "refresh",
+        },
+        config.jwt.refreshSecret || config.jwt.secret,
+        { expiresIn: config.jwt.refreshExpiry || "7d" }
     );
 
     let deviceInfo = {};
@@ -233,14 +320,20 @@ userSchema.methods.generateAccessToken = async function (req) {
         deviceInfo,
         ipAddress: getIpDetails(req).clientIp,
         loginAt: new Date(),
-        expiresAt,
+        expiresAt: sessionExpiresAt,
         isActive: true,
     };
 
     this.sessions.push(session);
     await this.save();
 
-    return { token, expiryTime: expiresAt.toISOString() };
+    return {
+        token,
+        accessToken: token,
+        refreshToken,
+        expiryTime: accessExpiresAt.toISOString(),
+        refreshExpiryTime: sessionExpiresAt.toISOString(),
+    };
 };
 
 // Revoke a session

@@ -10,6 +10,7 @@ import { DbRequestsView } from "./components/views/DbRequestsView";
 import { DbAuditsView } from "./components/views/DbAuditsView";
 import { VersionsView } from "./components/views/VersionsView";
 import { LogViewerView } from "./components/views/LogViewerView";
+import { SecurityView } from "./components/views/SecurityView";
 import { useTheme } from "./hooks/useTheme";
 import { useSocket } from "./hooks/useSocket";
 import {
@@ -24,6 +25,7 @@ import {
   FileText,
   Database,
   ShieldCheck,
+  ShieldAlert,
   GitBranch,
   Lock,
   LogIn,
@@ -35,6 +37,7 @@ export function App() {
   const location = useLocation();
   const [token, setToken] = useState(() => getToken());
   const [isLoginOpen, setIsLoginOpen] = useState(false);
+  const [modalConfig, setModalConfig] = useState({ view: "login" });
   const [authBanner, setAuthBanner] = useState("");
   const [systemStats, setSystemStats] = useState(null);
 
@@ -54,6 +57,47 @@ export function App() {
       setAuthBanner(msg);
       setIsLoginOpen(true);
     });
+  }, []);
+
+  // Handle URL parameters for Account Unlock & Password Reset redirects (e.g. from security emails)
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const isUnlocked = params.get("unlocked");
+    const unlockTokenParam = params.get("unlockToken") || (!window.location.pathname.includes("reset-password") ? params.get("token") : null);
+    const resetTokenParam = params.get("resetToken") || (window.location.pathname.includes("reset-password") ? params.get("token") : null);
+    const errorParam = params.get("error");
+
+    if (isUnlocked === "true") {
+      setAuthBanner("Account unlocked successfully! You can now sign in with your credentials.");
+      setModalConfig({ view: "login" });
+      setIsLoginOpen(true);
+      window.history.replaceState({}, document.title, window.location.pathname);
+    } else if (isUnlocked === "false" || errorParam) {
+      setAuthBanner(`Account action failed: ${errorParam || "The link has expired or is invalid."}`);
+      setModalConfig({ view: "login" });
+      setIsLoginOpen(true);
+      window.history.replaceState({}, document.title, window.location.pathname);
+    } else if (resetTokenParam) {
+      setAuthBanner("Password reset token detected. Please set your new password below.");
+      setModalConfig({ view: "reset" });
+      setIsLoginOpen(true);
+      window.history.replaceState({}, document.title, window.location.pathname);
+    } else if (unlockTokenParam) {
+      api.unlockAccount(unlockTokenParam)
+        .then(() => {
+          setAuthBanner("Account unlocked successfully via token! Please sign in.");
+          setModalConfig({ view: "login" });
+          setIsLoginOpen(true);
+        })
+        .catch((err) => {
+          setAuthBanner(`Unlock failed: ${err.message || "Invalid or expired token"}`);
+          setModalConfig({ view: "unlock" });
+          setIsLoginOpen(true);
+        })
+        .finally(() => {
+          window.history.replaceState({}, document.title, window.location.pathname);
+        });
+    }
   }, []);
 
   // Fetch initial system telemetry if token is available
@@ -89,6 +133,7 @@ export function App() {
     { id: "files", label: "Log Files", path: "/files", icon: FileText, requiresAuth: true },
     { id: "db-requests", label: "HTTP Requests", path: "/db-requests", icon: Database, requiresAuth: true },
     { id: "db-audits", label: "Audit Trails", path: "/db-audits", icon: ShieldCheck, requiresAuth: true },
+    { id: "security", label: "Security & Lockouts", path: "/security", icon: ShieldAlert, requiresAuth: true },
     { id: "versions", label: "Time Machine", path: "/versions", icon: GitBranch, requiresAuth: true },
   ];
 
@@ -241,6 +286,16 @@ export function App() {
               }
             />
             <Route
+              path="/security"
+              element={
+                !token ? (
+                  <AuthRequiredCard onOpenLogin={() => setIsLoginOpen(true)} title="Security & Threat Management" />
+                ) : (
+                  <SecurityView />
+                )
+              }
+            />
+            <Route
               path="/versions"
               element={
                 !token ? (
@@ -250,8 +305,32 @@ export function App() {
                 )
               }
             />
-            {/* Fallback route */}
-            <Route path="*" element={<Navigate to="/stream" replace />} />
+            <Route
+              path="/unlock-account"
+              element={
+                <StreamView
+                  liveStream={liveStream}
+                  streamPaused={streamPaused}
+                  onTogglePause={togglePauseStream}
+                  onClear={clearStream}
+                  socketConnected={socketConnected}
+                />
+              }
+            />
+            <Route
+              path="/reset-password"
+              element={
+                <StreamView
+                  liveStream={liveStream}
+                  streamPaused={streamPaused}
+                  onTogglePause={togglePauseStream}
+                  onClear={clearStream}
+                  socketConnected={socketConnected}
+                />
+              }
+            />
+            {/* Fallback route - Preserves query parameters */}
+            <Route path="*" element={<Navigate to={`/stream${window.location.search || ""}`} replace />} />
           </Routes>
         </div>
       </main>
@@ -260,6 +339,7 @@ export function App() {
         open={isLoginOpen}
         onClose={() => setIsLoginOpen(false)}
         onLoginSuccess={handleLoginSuccess}
+        initialView={modalConfig.view}
       />
     </div>
   );

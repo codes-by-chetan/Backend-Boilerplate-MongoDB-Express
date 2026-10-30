@@ -4,6 +4,7 @@ packages:
   - "frontend/packages/*"
 
 allowBuilds:
+  '@scarf/scarf': set this to true or false
   bcrypt: true
   esbuild: true
 
