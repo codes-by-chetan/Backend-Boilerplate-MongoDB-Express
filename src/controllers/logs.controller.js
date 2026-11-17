@@ -11,6 +11,7 @@ import ApiResponse from "../utils/ApiResponse.js";
 import diffUtil from "../utils/diff.util.js";
 import { decryptText, findEncryptedFieldPaths } from "../utils/crypto.util.js";
 import config from "../config/env.config.js";
+import services from "../services/index.js";
 
 const logsDirectory = path.join(process.cwd(), "logs");
 const safeLogFileNamePattern = /^logs-\d{4}-\d{2}-\d{2}\.html$/;
@@ -701,7 +702,7 @@ export const decryptField = asyncHandler(async (req, res) => {
     }
 
     // Resolve logUrl and build real field path map from RequestLog if logId is provided
-    let logUrl = "";
+    let logUrl = typeof req.body.logUrl === "string" ? req.body.logUrl.trim() : "";
     const logFieldMap = new Map();
 
     if (logId && mongoose.Types.ObjectId.isValid(logId)) {
@@ -898,6 +899,128 @@ export const getDecryptionAuditLogs = asyncHandler(async (req, res) => {
     );
 });
 
+export const getRetentionSettings = asyncHandler(async (req, res) => {
+    const settings = await services.dataRetentionService.getSettings();
+    res.status(200).json(
+        new ApiResponse(200, settings, "Data retention settings retrieved successfully")
+    );
+});
+
+export const updateRetentionSettings = asyncHandler(async (req, res) => {
+    const { scrapeRunsDays, requestLogsDays } = req.body;
+    const updated = await services.dataRetentionService.updateSettings({
+        scrapeRunsDays,
+        requestLogsDays,
+    });
+    res.status(200).json(
+        new ApiResponse(200, updated, "Data retention settings updated successfully")
+    );
+});
+
+export const runRetentionPurge = asyncHandler(async (req, res) => {
+    const result = await services.dataRetentionService.purgeExpiredRecords();
+    res.status(200).json(
+        new ApiResponse(200, result, "Expired records purged successfully")
+    );
+});
+
+export const getArchiveSettings = asyncHandler(async (req, res) => {
+    const settings = await services.logArchiveService.getSettings();
+    res.status(200).json(
+        new ApiResponse(200, settings, "GitHub archive settings retrieved successfully")
+    );
+});
+
+export const updateArchiveSettings = asyncHandler(async (req, res) => {
+    const updated = await services.logArchiveService.updateSettings(req.body);
+    res.status(200).json(
+        new ApiResponse(200, updated, "GitHub archive settings updated successfully")
+    );
+});
+
+export const testArchiveConnection = asyncHandler(async (req, res) => {
+    const result = await services.logArchiveService.testConnection(req.body.token);
+    res.status(200).json(
+        new ApiResponse(200, result, "GitHub connection verified successfully")
+    );
+});
+
+export const getArchiveRepos = asyncHandler(async (req, res) => {
+    const repos = await services.logArchiveService.getRepos(req.query.token);
+    res.status(200).json(
+        new ApiResponse(200, repos, "GitHub repositories fetched successfully")
+    );
+});
+
+export const createArchiveRepo = asyncHandler(async (req, res) => {
+    const { name, isPrivate, description, token } = req.body;
+    const repo = await services.logArchiveService.createRepo({
+        name,
+        isPrivate,
+        description,
+        tokenInput: token,
+    });
+    res.status(201).json(
+        new ApiResponse(201, repo, `Repository '${repo.fullName}' created successfully on GitHub`)
+    );
+});
+
+export const triggerArchiveDate = asyncHandler(async (req, res) => {
+    const { date, purgeFromDb, force } = req.body;
+    let result;
+    if (!date || date === "yesterday") {
+        result = await services.logArchiveService.archiveYesterday({ purgeFromDb, force });
+    } else {
+        result = await services.logArchiveService.archiveDate(date, { purgeFromDb, force });
+    }
+
+    res.status(200).json(
+        new ApiResponse(200, result, `Archive operation completed for date ${result.date}`)
+    );
+});
+
+export const listArchives = asyncHandler(async (req, res) => {
+    const archives = await services.logArchiveService.listArchives();
+    res.status(200).json(
+        new ApiResponse(200, archives, "Archive catalog retrieved successfully")
+    );
+});
+
+export const queryArchiveLogs = asyncHandler(async (req, res) => {
+    const result = await services.logArchiveService.queryArchiveLogs(req.body);
+    res.status(200).json(
+        new ApiResponse(200, result, "Archive query executed successfully")
+    );
+});
+
+export const getArchiveStorageStats = asyncHandler(async (req, res) => {
+    const stats = await services.logArchiveService.getStorageStats();
+    res.status(200).json(
+        new ApiResponse(200, stats, "MongoDB storage statistics retrieved successfully")
+    );
+});
+
+export const getPendingArchiveDates = asyncHandler(async (req, res) => {
+    const pending = await services.logArchiveService.getPendingDates();
+    res.status(200).json(
+        new ApiResponse(200, pending, "Pending unarchived dates retrieved successfully")
+    );
+});
+
+export const archiveAllPendingDates = asyncHandler(async (req, res) => {
+    const result = await services.logArchiveService.archiveAllPendingDates(req.body);
+    res.status(200).json(
+        new ApiResponse(200, result, "All pending dates archived and purged successfully")
+    );
+});
+
+export const reclaimStorage = asyncHandler(async (req, res) => {
+    const result = await services.logArchiveService.reclaimStorage(req.body);
+    res.status(200).json(
+        new ApiResponse(200, result, "Collection rebuilt and physical storage reclaimed successfully")
+    );
+});
+
 const logsController = {
     getAllLogs,
     getLogByFileName,
@@ -914,6 +1037,21 @@ const logsController = {
     rollbackDocument,
     decryptField,
     getDecryptionAuditLogs,
+    getRetentionSettings,
+    updateRetentionSettings,
+    runRetentionPurge,
+    getArchiveSettings,
+    updateArchiveSettings,
+    testArchiveConnection,
+    getArchiveRepos,
+    createArchiveRepo,
+    triggerArchiveDate,
+    listArchives,
+    queryArchiveLogs,
+    getArchiveStorageStats,
+    getPendingArchiveDates,
+    archiveAllPendingDates,
+    reclaimStorage,
 };
 
 export default logsController;

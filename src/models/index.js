@@ -4,6 +4,7 @@ import DbLogs from "./dbLogs.model.js";
 import RequestLog from "./requestLogs.model.js";
 import Notification from "./notification.model.js";
 import DecryptionAuditLog from "./decryptionAuditLog.model.js";
+import SystemSettings from "./systemSettings.model.js";
 
 const models = {
     User,
@@ -12,6 +13,7 @@ const models = {
     RequestLog,
     Notification,
     DecryptionAuditLog,
+    SystemSettings,
 };
 
 export {
@@ -21,6 +23,7 @@ export {
     RequestLog,
     Notification,
     DecryptionAuditLog,
+    SystemSettings,
 };
 
 export default models;

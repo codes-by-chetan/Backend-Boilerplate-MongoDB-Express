@@ -14,13 +14,32 @@ import {
   Users,
   FileText,
   ShieldAlert,
+  Trash2,
+  Save,
+  ShieldCheck,
+  Calendar,
+  Github,
+  Archive,
 } from "lucide-react";
 import { api } from "../../api/client";
+import { GitHubArchiveModal } from "../modals/GitHubArchiveModal";
 
 export function SystemView({ liveMetrics, token }) {
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+
+  // Data Retention Settings state
+  const [retention, setRetention] = useState({ requestLogsDays: 7 });
+  const [retentionLoading, setRetentionLoading] = useState(false);
+  const [retentionSaving, setRetentionSaving] = useState(false);
+  const [retentionPurging, setRetentionPurging] = useState(false);
+  const [retentionMsg, setRetentionMsg] = useState("");
+  const [retentionError, setRetentionError] = useState("");
+
+  // GitHub Archival state
+  const [archiveSettings, setArchiveSettings] = useState(null);
+  const [isGithubModalOpen, setIsGithubModalOpen] = useState(false);
 
   const fetchStats = async () => {
     if (!token) return;
@@ -36,8 +55,77 @@ export function SystemView({ liveMetrics, token }) {
     }
   };
 
+  const fetchRetentionSettings = async () => {
+    if (!token) return;
+    setRetentionLoading(true);
+    try {
+      const [retRes, archRes] = await Promise.all([
+        api.getRetentionSettings().catch(() => null),
+        api.getArchiveSettings().catch(() => null),
+      ]);
+      if (retRes?.data) {
+        setRetention(retRes.data);
+      }
+      if (archRes?.data) {
+        setArchiveSettings(archRes.data);
+      }
+    } catch (err) {
+      // Silently keep default
+    } finally {
+      setRetentionLoading(false);
+    }
+  };
+
+  const handleSaveRetention = async (e) => {
+    e?.preventDefault();
+    if (!token) return;
+    setRetentionSaving(true);
+    setRetentionMsg("");
+    setRetentionError("");
+    try {
+      const res = await api.updateRetentionSettings({
+        requestLogsDays: Number(retention.requestLogsDays),
+      });
+      if (res?.data) {
+        setRetention((prev) => ({ ...prev, ...res.data }));
+      }
+      setRetentionMsg("Data retention policies updated and synchronized successfully!");
+      setTimeout(() => setRetentionMsg(""), 5000);
+    } catch (err) {
+      setRetentionError(err.message || "Failed to save retention settings");
+    } finally {
+      setRetentionSaving(false);
+    }
+  };
+
+  const handleRunPurge = async () => {
+    if (!token) return;
+    if (
+      !window.confirm(
+        "Are you sure you want to trigger an immediate database cleanup for records older than the configured days?"
+      )
+    ) {
+      return;
+    }
+    setRetentionPurging(true);
+    setRetentionMsg("");
+    setRetentionError("");
+    try {
+      const res = await api.runRetentionPurge();
+      const s = res?.data;
+      setRetentionMsg(`Cleanup complete! Purged ${s?.requestLogsDeleted || 0} request logs.`);
+      fetchRetentionSettings();
+      setTimeout(() => setRetentionMsg(""), 7000);
+    } catch (err) {
+      setRetentionError(err.message || "Purge execution failed");
+    } finally {
+      setRetentionPurging(false);
+    }
+  };
+
   useEffect(() => {
     fetchStats();
+    fetchRetentionSettings();
     const interval = setInterval(() => {
       if (token) fetchStats();
     }, 10000);
@@ -256,6 +344,168 @@ export function SystemView({ liveMetrics, token }) {
         </Card>
       </div>
 
+      {/* Configurable Data Retention & Automated Database Purge Card */}
+      <Card className="p-5 border-border/80 bg-card/60 backdrop-blur-xs">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-border/60">
+          <div>
+            <div className="flex items-center gap-2">
+              <HardDrive className="h-4 w-4 text-primary" />
+              <CardTitle className="text-sm font-bold">
+                Automated Data Retention & MongoDB Storage Cleanup
+              </CardTitle>
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">
+              Configure automatic TTL expiration thresholds for HTTP request logs to keep MongoDB database storage within free tier limits.
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleRunPurge}
+              disabled={retentionPurging || !token}
+              className="gap-1.5 text-xs text-destructive border-destructive/30 hover:bg-destructive/10"
+            >
+              <Trash2 className={`h-3.5 w-3.5 ${retentionPurging ? "animate-spin" : ""}`} />
+              <span>{retentionPurging ? "Purging..." : "Purge Expired Now"}</span>
+            </Button>
+          </div>
+        </div>
+
+        {retentionMsg && (
+          <div className="mt-4 p-3 rounded-md bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 text-xs flex items-center gap-2">
+            <ShieldCheck className="h-4 w-4 shrink-0" />
+            <span>{retentionMsg}</span>
+          </div>
+        )}
+
+        {retentionError && (
+          <div className="mt-4 p-3 rounded-md bg-destructive/10 border border-destructive/20 text-destructive text-xs">
+            {retentionError}
+          </div>
+        )}
+
+        <form onSubmit={handleSaveRetention} className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* Request Logs Retention */}
+          <div className="p-3.5 rounded-lg border border-border/60 bg-muted/20 space-y-2 md:col-span-2">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-semibold text-foreground">
+                HTTP Request Logs Retention
+              </label>
+              <Badge variant="outline" className="text-[10px] text-primary border-primary/30">
+                Default: 7 Days
+              </Badge>
+            </div>
+            <p className="text-[11px] text-muted-foreground">
+              Purges RequestLog traffic documents, IP details, and payloads older than:
+            </p>
+            <div className="flex items-center gap-2 pt-1">
+              <input
+                type="number"
+                min="1"
+                max="365"
+                value={retention.requestLogsDays ?? 7}
+                onChange={(e) => setRetention({ ...retention, requestLogsDays: e.target.value })}
+                className="w-24 px-3 py-1.5 rounded-md border border-input bg-background text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-primary"
+              />
+              <span className="text-xs text-muted-foreground font-medium">Days</span>
+            </div>
+          </div>
+
+          {/* Actions & Last Purge Telemetry */}
+          <div className="md:col-span-2 flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2">
+            <div className="text-[11px] text-muted-foreground flex flex-wrap items-center gap-2">
+              <span>
+                Last Automated Cleanup:{" "}
+                <strong className="text-foreground">
+                  {retention.lastPurgeAt
+                    ? new Date(retention.lastPurgeAt).toLocaleString()
+                    : "Pending first scheduled cycle"}
+                </strong>
+              </span>
+              {retention.lastPurgeStats?.requestLogsDeleted > 0 && (
+                <span className="text-emerald-500 font-medium">
+                  ({retention.lastPurgeStats.requestLogsDeleted} logs cleaned)
+                </span>
+              )}
+            </div>
+
+            <Button
+              type="submit"
+              size="sm"
+              disabled={retentionSaving || !token}
+              className="gap-1.5 text-xs font-semibold px-4 w-full sm:w-auto"
+            >
+              <Save className={`h-3.5 w-3.5 ${retentionSaving ? "animate-spin" : ""}`} />
+              <span>{retentionSaving ? "Saving..." : "Save Policies"}</span>
+            </Button>
+          </div>
+        </form>
+      </Card>
+
+      {/* GitHub Cold-Storage Request Logs Archival Card */}
+      <Card className="p-5 border-purple-500/20 bg-card/60 backdrop-blur-xs">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-border/60">
+          <div>
+            <div className="flex items-center gap-2">
+              <Github className="h-4 w-4 text-purple-500" />
+              <CardTitle className="text-sm font-bold">
+                GitHub Cold-Storage Request Logs Archival
+              </CardTitle>
+              <Badge variant="outline" className="text-[10px] text-emerald-500 border-emerald-500/30">
+                Solves 512MB Quota
+              </Badge>
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">
+              Automatically packages daily HTTP request logs into JSON and pushes to GitHub, purging MongoDB to keep database storage minimal.
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              onClick={() => setIsGithubModalOpen(true)}
+              className="gap-1.5 text-xs font-semibold"
+            >
+              <Github className="h-3.5 w-3.5" />
+              <span>Configure GitHub Archive</span>
+            </Button>
+          </div>
+        </div>
+
+        <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs font-mono">
+          <div className="p-3 rounded-lg border border-border/60 bg-muted/20">
+            <span className="text-[10px] uppercase font-bold text-muted-foreground block">Archival Status</span>
+            <div className="flex items-center gap-2 mt-1">
+              <span
+                className={`h-2.5 w-2.5 rounded-full ${
+                  archiveSettings?.enabled ? "bg-emerald-500 animate-pulse" : "bg-muted-foreground"
+                }`}
+              />
+              <span className="font-bold text-foreground capitalize">
+                {archiveSettings?.enabled ? "Daily Auto-Archival Active" : "Disabled / Inactive"}
+              </span>
+            </div>
+          </div>
+
+          <div className="p-3 rounded-lg border border-border/60 bg-muted/20">
+            <span className="text-[10px] uppercase font-bold text-muted-foreground block">Target Repository</span>
+            <span className="font-bold text-foreground mt-1 block truncate">
+              {archiveSettings?.owner && archiveSettings?.repo
+                ? `${archiveSettings.owner}/${archiveSettings.repo} (${archiveSettings.branch || "main"})`
+                : "Not Configured"}
+            </span>
+          </div>
+
+          <div className="p-3 rounded-lg border border-border/60 bg-muted/20">
+            <span className="text-[10px] uppercase font-bold text-muted-foreground block">Last Archived Date</span>
+            <span className="font-bold text-foreground mt-1 block">
+              {archiveSettings?.lastArchivedDate || "No archives recorded yet"}
+            </span>
+          </div>
+        </div>
+      </Card>
+
       {/* Raw Snapshot JSON */}
       <Card className="p-4">
         <CardTitle className="text-xs font-semibold mb-3 flex items-center gap-2">
@@ -264,6 +514,14 @@ export function SystemView({ liveMetrics, token }) {
         </CardTitle>
         <JsonViewer data={stats} title="System Snapshot JSON" />
       </Card>
+
+      <GitHubArchiveModal
+        isOpen={isGithubModalOpen}
+        onClose={() => setIsGithubModalOpen(false)}
+        onArchivedSuccess={() => {
+          fetchRetentionSettings();
+        }}
+      />
     </div>
   );
 }

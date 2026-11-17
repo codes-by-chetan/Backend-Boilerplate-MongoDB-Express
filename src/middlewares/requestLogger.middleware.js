@@ -79,6 +79,24 @@ const requestLoggerMiddleware = async (req, res, next) => {
             userId,
         });
 
+        // Storage Optimization Guard: Skip persisting successful high-frequency uptime checks,
+        // static file probes, and client polling routes into MongoDB to prevent disk bloat.
+        // WebSocket telemetry above keeps live dashboards functional; errors (>= 400) are ALWAYS stored.
+        if (!isError) {
+            const cleanUrl = (req.originalUrl || "").split("?")[0];
+            const isNoisyUptimeOrPoll =
+                cleanUrl === "/" ||
+                cleanUrl === "/health" ||
+                cleanUrl === "/ping" ||
+                cleanUrl === "/favicon.ico" ||
+                cleanUrl === "/robots.txt" ||
+                cleanUrl === "/api/notifications/unread-count";
+
+            if (isNoisyUptimeOrPoll) {
+                return;
+            }
+        }
+
         // Persist into MongoDB RequestLog collection with confidential fields securely encrypted
         try {
             const encryptionKey = config.logEncryptionKey;
@@ -95,6 +113,15 @@ const requestLoggerMiddleware = async (req, res, next) => {
                     description: "Response logs omitted from RequestLog to prevent recursive bloat",
                     logCount: responseData?.data?.logs?.length || 0,
                     logIds: (responseData?.data?.logs || []).map((l) => l._id),
+                    pagination: responseData?.data?.pagination,
+                    statusCode: responseData?.statusCode,
+                    message: responseData?.message,
+                };
+            } else if (url.includes("/api/logs/archive/query")) {
+                sanitizedResponse = {
+                    _omitted: true,
+                    description: "Archived logs query result omitted from RequestLog to prevent recursive bloat",
+                    logCount: responseData?.data?.logs?.length || 0,
                     pagination: responseData?.data?.pagination,
                     statusCode: responseData?.statusCode,
                     message: responseData?.message,

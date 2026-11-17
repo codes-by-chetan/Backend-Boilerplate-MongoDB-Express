@@ -9,6 +9,7 @@ import { StreamView } from "./components/views/StreamView";
 import { SystemView } from "./components/views/SystemView";
 import { FilesView } from "./components/views/FilesView";
 import { DbRequestsView } from "./components/views/DbRequestsView";
+import { ArchiveExplorerView } from "./components/views/ArchiveExplorerView";
 import { DbAuditsView } from "./components/views/DbAuditsView";
 import { SecurityView } from "./components/views/SecurityView";
 import { UsersView } from "./components/views/UsersView";
@@ -152,7 +153,7 @@ export function App() {
   };
 
   const handleLogout = async () => {
-    await api.logout().catch(() => {});
+    await api.logout().catch(() => { });
     clearStoredTokens();
     setToken("");
     setCurrentUser(null);
@@ -173,178 +174,188 @@ export function App() {
         inFlightRequests={liveMetrics?.inFlightRequests || 0}
       />
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 py-5 space-y-5">
-        {/* Auth notification banner if any */}
-        {authBanner && (
-          <div className="flex items-center justify-between p-3 rounded-lg border border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400 text-xs">
-            <span>{authBanner}</span>
-            <button
-              onClick={() => setAuthBanner("")}
-              className="text-xs font-semibold underline hover:no-underline ml-4"
-            >
-              Dismiss
-            </button>
+        <main className="w-full max-w-[1720px] 2xl:max-w-[1850px] mx-auto px-4 sm:px-6 lg:px-8 py-5 space-y-5">
+          {/* Auth notification banner if any */}
+          {authBanner && (
+            <div className="flex items-center justify-between p-3 rounded-lg border border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400 text-xs">
+              <span>{authBanner}</span>
+              <button
+                onClick={() => setAuthBanner("")}
+                className="text-xs font-semibold underline hover:no-underline ml-4"
+              >
+                Dismiss
+              </button>
+            </div>
+          )}
+
+          {/* Real-time Quick Dash Metric Cards */}
+          <QuickStats
+            liveMetrics={liveMetrics}
+            systemStats={systemStats}
+          />
+
+          {/* Tab Navigation Bar with Client-Side Routing */}
+          <NavigationTabs
+            token={token}
+            liveStreamCount={liveStream.length}
+          />
+
+          {/* Tab View Contents via Route Matching */}
+          <div className="pt-1">
+            <Routes>
+              <Route
+                path="/"
+                element={
+                  <StreamView
+                    liveStream={liveStream}
+                    streamPaused={streamPaused}
+                    onTogglePause={togglePauseStream}
+                    onClear={clearStream}
+                    socketConnected={socketConnected}
+                  />
+                }
+              />
+              <Route
+                path="/stream"
+                element={
+                  <StreamView
+                    liveStream={liveStream}
+                    streamPaused={streamPaused}
+                    onTogglePause={togglePauseStream}
+                    onClear={clearStream}
+                    socketConnected={socketConnected}
+                  />
+                }
+              />
+              <Route
+                path="/system"
+                element={
+                  !token ? (
+                    <AuthRequiredCard onOpenLogin={() => setIsLoginOpen(true)} title="Host Server Telemetry" />
+                  ) : (
+                    <SystemView stats={systemStats} onRefresh={async () => {
+                      const res = await api.getSystemStats();
+                      setSystemStats(res.data || res);
+                    }} />
+                  )
+                }
+              />
+              <Route
+                path="/files"
+                element={
+                  !token ? (
+                    <AuthRequiredCard onOpenLogin={() => setIsLoginOpen(true)} title="Raw Server Log Files" />
+                  ) : (
+                    <FilesView />
+                  )
+                }
+              />
+              <Route
+                path="/log-viewer"
+                element={
+                  !token ? (
+                    <AuthRequiredCard onOpenLogin={() => setIsLoginOpen(true)} title="Interactive Log File Viewer" />
+                  ) : (
+                    <LogViewerView />
+                  )
+                }
+              />
+              <Route
+                path="/db-requests"
+                element={
+                  !token ? (
+                    <AuthRequiredCard onOpenLogin={() => setIsLoginOpen(true)} title="HTTP Requests Database Collection" />
+                  ) : (
+                    <DbRequestsView />
+                  )
+                }
+              />
+              <Route
+                path="/archive-explorer"
+                element={
+                  !token ? (
+                    <AuthRequiredCard onOpenLogin={() => setIsLoginOpen(true)} title="Log Archives & MongoDB Query Engine" />
+                  ) : (
+                    <ArchiveExplorerView />
+                  )
+                }
+              />
+              <Route
+                path="/db-audits"
+                element={
+                  !token ? (
+                    <AuthRequiredCard onOpenLogin={() => setIsLoginOpen(true)} title="MongoDB Mutation Audit Trail" />
+                  ) : (
+                    <DbAuditsView />
+                  )
+                }
+              />
+              <Route
+                path="/security"
+                element={
+                  !token ? (
+                    <AuthRequiredCard onOpenLogin={() => setIsLoginOpen(true)} title="Security & Threat Management" />
+                  ) : (
+                    <SecurityView />
+                  )
+                }
+              />
+              <Route
+                path="/versions"
+                element={
+                  !token ? (
+                    <AuthRequiredCard onOpenLogin={() => setIsLoginOpen(true)} title="Mongoose Version Time-Machine & Rollback" />
+                  ) : (
+                    <VersionsView />
+                  )
+                }
+              />
+              <Route
+                path="/users"
+                element={
+                  !token ? (
+                    <AuthRequiredCard onOpenLogin={() => setIsLoginOpen(true)} title="User Directory & Role Access" />
+                  ) : (
+                    <UsersView />
+                  )
+                }
+              />
+              <Route
+                path="/unlock-account"
+                element={
+                  <StreamView
+                    liveStream={liveStream}
+                    streamPaused={streamPaused}
+                    onTogglePause={togglePauseStream}
+                    onClear={clearStream}
+                    socketConnected={socketConnected}
+                  />
+                }
+              />
+              <Route
+                path="/reset-password"
+                element={
+                  <StreamView
+                    liveStream={liveStream}
+                    streamPaused={streamPaused}
+                    onTogglePause={togglePauseStream}
+                    onClear={clearStream}
+                    socketConnected={socketConnected}
+                  />
+                }
+              />
+              {/* Fallback route - Preserves query parameters */}
+              <Route path="*" element={<Navigate to={`/stream${window.location.search || ""}`} replace />} />
+            </Routes>
           </div>
-        )}
+        </main>
 
-        {/* Real-time Quick Dash Metric Cards */}
-        <QuickStats
-          liveMetrics={liveMetrics}
-          systemStats={systemStats}
+        <LoginModal
+          open={isLoginOpen}
+          onClose={() => setIsLoginOpen(false)}
+          onLoginSuccess={handleLoginSuccess}
+          initialView={modalConfig.view}
         />
-
-        {/* Tab Navigation Bar with Client-Side Routing */}
-        <NavigationTabs
-          token={token}
-          liveStreamCount={liveStream.length}
-        />
-
-        {/* Tab View Contents via Route Matching */}
-        <div className="pt-1">
-          <Routes>
-            <Route
-              path="/"
-              element={
-                <StreamView
-                  liveStream={liveStream}
-                  streamPaused={streamPaused}
-                  onTogglePause={togglePauseStream}
-                  onClear={clearStream}
-                  socketConnected={socketConnected}
-                />
-              }
-            />
-            <Route
-              path="/stream"
-              element={
-                <StreamView
-                  liveStream={liveStream}
-                  streamPaused={streamPaused}
-                  onTogglePause={togglePauseStream}
-                  onClear={clearStream}
-                  socketConnected={socketConnected}
-                />
-              }
-            />
-            <Route
-              path="/system"
-              element={
-                !token ? (
-                  <AuthRequiredCard onOpenLogin={() => setIsLoginOpen(true)} title="Host Server Telemetry" />
-                ) : (
-                  <SystemView stats={systemStats} onRefresh={async () => {
-                    const res = await api.getSystemStats();
-                    setSystemStats(res.data || res);
-                  }} />
-                )
-              }
-            />
-            <Route
-              path="/files"
-              element={
-                !token ? (
-                  <AuthRequiredCard onOpenLogin={() => setIsLoginOpen(true)} title="Raw Server Log Files" />
-                ) : (
-                  <FilesView />
-                )
-              }
-            />
-            <Route
-              path="/log-viewer"
-              element={
-                !token ? (
-                  <AuthRequiredCard onOpenLogin={() => setIsLoginOpen(true)} title="Interactive Log File Viewer" />
-                ) : (
-                  <LogViewerView />
-                )
-              }
-            />
-            <Route
-              path="/db-requests"
-              element={
-                !token ? (
-                  <AuthRequiredCard onOpenLogin={() => setIsLoginOpen(true)} title="HTTP Requests Database Collection" />
-                ) : (
-                  <DbRequestsView />
-                )
-              }
-            />
-            <Route
-              path="/db-audits"
-              element={
-                !token ? (
-                  <AuthRequiredCard onOpenLogin={() => setIsLoginOpen(true)} title="MongoDB Mutation Audit Trail" />
-                ) : (
-                  <DbAuditsView />
-                )
-              }
-            />
-            <Route
-              path="/security"
-              element={
-                !token ? (
-                  <AuthRequiredCard onOpenLogin={() => setIsLoginOpen(true)} title="Security & Threat Management" />
-                ) : (
-                  <SecurityView />
-                )
-              }
-            />
-            <Route
-              path="/versions"
-              element={
-                !token ? (
-                  <AuthRequiredCard onOpenLogin={() => setIsLoginOpen(true)} title="Mongoose Version Time-Machine & Rollback" />
-                ) : (
-                  <VersionsView />
-                )
-              }
-            />
-            <Route
-              path="/users"
-              element={
-                !token ? (
-                  <AuthRequiredCard onOpenLogin={() => setIsLoginOpen(true)} title="User Directory & Role Access" />
-                ) : (
-                  <UsersView />
-                )
-              }
-            />
-            <Route
-              path="/unlock-account"
-              element={
-                <StreamView
-                  liveStream={liveStream}
-                  streamPaused={streamPaused}
-                  onTogglePause={togglePauseStream}
-                  onClear={clearStream}
-                  socketConnected={socketConnected}
-                />
-              }
-            />
-            <Route
-              path="/reset-password"
-              element={
-                <StreamView
-                  liveStream={liveStream}
-                  streamPaused={streamPaused}
-                  onTogglePause={togglePauseStream}
-                  onClear={clearStream}
-                  socketConnected={socketConnected}
-                />
-              }
-            />
-            {/* Fallback route - Preserves query parameters */}
-            <Route path="*" element={<Navigate to={`/stream${window.location.search || ""}`} replace />} />
-          </Routes>
-        </div>
-      </main>
-
-      <LoginModal
-        open={isLoginOpen}
-        onClose={() => setIsLoginOpen(false)}
-        onLoginSuccess={handleLoginSuccess}
-        initialView={modalConfig.view}
-      />
     </div>
   );
 }

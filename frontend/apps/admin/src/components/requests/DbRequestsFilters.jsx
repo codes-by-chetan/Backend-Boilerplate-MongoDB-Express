@@ -1,8 +1,9 @@
 import React from "react";
+import { Link } from "react-router-dom";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Select } from "../ui/select";
-import { Search, ShieldCheck, RefreshCw } from "lucide-react";
+import { Search, ShieldCheck, RefreshCw, Archive } from "lucide-react";
 
 export function DbRequestsFilters({
   search,
@@ -75,6 +76,15 @@ export function DbRequestsFilters({
       </div>
 
       <div className="flex items-center gap-2">
+        <Link
+          to="/archive-explorer"
+          className="h-8 px-3 rounded-md text-xs gap-1.5 flex items-center border border-primary/30 text-primary hover:bg-primary/10 transition-colors"
+          title="Open Log Archives & MongoDB Query Engine"
+        >
+          <Archive className="h-3.5 w-3.5" />
+          <span>Cold Archives & Query</span>
+        </Link>
+
         <Button
           type="button"
           variant="outline"

@@ -28,6 +28,8 @@ requestLogSchema.index({ requestStatus: 1, createdAt: -1 });
 requestLogSchema.index({ requestMethod: 1, createdAt: -1 });
 requestLogSchema.index({ responseStatus: 1, createdAt: -1 });
 requestLogSchema.index({ requestUrl: 1, createdAt: -1 });
+// Default 7-day automatic retention index (configurable dynamically via dataRetention service)
+requestLogSchema.index({ createdAt: 1 }, { expireAfterSeconds: 7 * 24 * 60 * 60 });
 
 // requestLogSchema.pre("save", dbLogger("RequestLog"));
 

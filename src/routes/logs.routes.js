@@ -23,6 +23,25 @@ router.get("/db-audit-logs", controllers.logsController.getDbAuditLogs);
 router.post("/decrypt-field", controllers.logsController.decryptField);
 router.get("/decryption-audits", controllers.logsController.getDecryptionAuditLogs);
 
+// Configurable Data Retention & Dynamic Purge
+router.get("/retention-settings", controllers.logsController.getRetentionSettings);
+router.put("/retention-settings", controllers.logsController.updateRetentionSettings);
+router.post("/retention-purge", controllers.logsController.runRetentionPurge);
+
+// GitHub Request Logs Archival & High-Performance Querying
+router.get("/archive/settings", controllers.logsController.getArchiveSettings);
+router.put("/archive/settings", controllers.logsController.updateArchiveSettings);
+router.post("/archive/test-connection", controllers.logsController.testArchiveConnection);
+router.get("/archive/repos", controllers.logsController.getArchiveRepos);
+router.post("/archive/create-repo", controllers.logsController.createArchiveRepo);
+router.post("/archive/trigger", controllers.logsController.triggerArchiveDate);
+router.get("/archive/list", controllers.logsController.listArchives);
+router.post("/archive/query", controllers.logsController.queryArchiveLogs);
+router.get("/archive/storage-stats", controllers.logsController.getArchiveStorageStats);
+router.get("/archive/pending-dates", controllers.logsController.getPendingArchiveDates);
+router.post("/archive/archive-pending", controllers.logsController.archiveAllPendingDates);
+router.post("/archive/reclaim-storage", controllers.logsController.reclaimStorage);
+
 // Mongoose Git-like Versioning & Document Lifecycle Endpoints
 router.get("/models", controllers.logsController.getAvailableModels);
 router.get("/model-docs/:modelName", controllers.logsController.getModelDocuments);

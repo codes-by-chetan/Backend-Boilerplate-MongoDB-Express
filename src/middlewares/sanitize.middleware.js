@@ -31,6 +31,11 @@ const sanitizeInPlace = (target) => {
  * Express middleware to sanitize incoming request data in-place without reassigning getter properties.
  */
 export const sanitizeInputs = (req, res, next) => {
+    // Preserve MongoDB query operators ($gte, $in, $regex, etc.) for admin log archive query endpoint
+    if (req.path === "/api/logs/archive/query" || req.originalUrl?.startsWith("/api/logs/archive/query")) {
+        return next();
+    }
+
     try {
         if (req.body && typeof req.body === "object") {
             sanitizeInPlace(req.body);

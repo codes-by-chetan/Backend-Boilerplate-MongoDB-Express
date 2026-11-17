@@ -38,6 +38,7 @@
     "nodemailer": "^10.0.1",
     "otplib": "^13.5.0",
     "qrcode": "^1.5.4",
+    "sift": "^17.1.4",
     "socket.io": "^4.8.3",
     "swagger-ui-express": "^5.0.1",
     "ua-parser-js": "^2.0.10",

@@ -502,10 +502,10 @@ export const api = {
       body: JSON.stringify({ cipherText, reason, logId, fieldName }),
     }),
 
-  decryptLogFields: ({ items, cipherTexts, fields, cipherText, reason, logId, fieldName }) =>
+  decryptLogFields: ({ items, cipherTexts, fields, cipherText, reason, logId, fieldName, logUrl }) =>
     apiFetch("/api/logs/decrypt-field", {
       method: "POST",
-      body: JSON.stringify({ items, cipherTexts, fields, cipherText, reason, logId, fieldName }),
+      body: JSON.stringify({ items, cipherTexts, fields, cipherText, reason, logId, fieldName, logUrl }),
     }),
 
   getDecryptionAudits: (params = {}) => {
@@ -514,4 +514,74 @@ export const api = {
     ).toString();
     return apiFetch(`/api/logs/decryption-audits${qs ? `?${qs}` : ""}`);
   },
+
+  // Data Retention & Automated Database Purge Management
+  getRetentionSettings: () => apiFetch("/api/logs/retention-settings"),
+
+  updateRetentionSettings: (data) =>
+    apiFetch("/api/logs/retention-settings", {
+      method: "PUT",
+      body: JSON.stringify(data),
+    }),
+
+  runRetentionPurge: () =>
+    apiFetch("/api/logs/retention-purge", {
+      method: "POST",
+    }),
+
+  // GitHub Request Logs Archival & Query Engine
+  getArchiveSettings: () => apiFetch("/api/logs/archive/settings"),
+
+  updateArchiveSettings: (data) =>
+    apiFetch("/api/logs/archive/settings", {
+      method: "PUT",
+      body: JSON.stringify(data),
+    }),
+
+  testArchiveConnection: (token) =>
+    apiFetch("/api/logs/archive/test-connection", {
+      method: "POST",
+      body: JSON.stringify({ token }),
+    }),
+
+  getArchiveRepos: (token) => {
+    const qs = token ? `?token=${encodeURIComponent(token)}` : "";
+    return apiFetch(`/api/logs/archive/repos${qs}`);
+  },
+
+  createArchiveRepo: (data) =>
+    apiFetch("/api/logs/archive/create-repo", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+
+  triggerArchiveDate: (data) =>
+    apiFetch("/api/logs/archive/trigger", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+
+  listArchives: () => apiFetch("/api/logs/archive/list"),
+
+  queryArchiveLogs: (params) =>
+    apiFetch("/api/logs/archive/query", {
+      method: "POST",
+      body: JSON.stringify(params),
+    }),
+
+  getArchiveStorageStats: () => apiFetch("/api/logs/archive/storage-stats"),
+
+  getPendingArchiveDates: () => apiFetch("/api/logs/archive/pending-dates"),
+
+  archivePendingDates: (data = {}) =>
+    apiFetch("/api/logs/archive/archive-pending", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+
+  reclaimStorage: (data = {}) =>
+    apiFetch("/api/logs/archive/reclaim-storage", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
 };
